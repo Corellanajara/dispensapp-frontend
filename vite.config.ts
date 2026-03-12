@@ -13,11 +13,11 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:5001',
+        target: 'https://dispensapp-backend-production-9a9a.up.railway.app',
         changeOrigin: true,
       },
       '/uploads': {
-        target: 'http://localhost:5001',
+        target: 'https://dispensapp-backend-production-9a9a.up.railway.app',
         changeOrigin: true,
       },
     },
