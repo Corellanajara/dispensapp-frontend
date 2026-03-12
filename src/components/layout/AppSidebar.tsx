@@ -9,6 +9,7 @@ import {
   SidebarMenuItem,
   SidebarHeader,
   SidebarFooter,
+  useSidebar,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/contexts/AuthContext';
 import { Link, NavLink, useLocation } from 'react-router-dom';
@@ -100,14 +101,19 @@ const navItems: NavItem[] = [
 export function AppSidebar() {
   const { user, logout, hasRole } = useAuth();
   const { pathname } = useLocation();
+  const { isMobile, setOpenMobile } = useSidebar();
   const filteredItems = navItems.filter((item) =>
     item.roles.some((role) => hasRole(role))
   );
 
+  const closeMobileMenu = () => {
+    if (isMobile) setOpenMobile(false);
+  };
+
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
-        <Link to="/" className="flex items-center gap-2">
+        <Link to="/" className="flex items-center gap-2" onClick={closeMobileMenu}>
           <Leaf className="h-8 w-8 text-primary" />
           <div>
             <h1 className="text-lg font-bold text-primary">Dispensapp</h1>
@@ -127,6 +133,7 @@ export function AppSidebar() {
                     render={<NavLink to={item.url} />}
                     isActive={pathname === item.url}
                     className="flex items-center gap-2 w-full"
+                    onClick={closeMobileMenu}
                   >
                     <item.icon className="h-4 w-4" />
                     <span>{item.title}</span>
@@ -150,7 +157,7 @@ export function AppSidebar() {
             <p className="text-xs text-muted-foreground capitalize">{user?.role}</p>
           </div>
         </div>
-        <Button variant="outline" size="sm" className="w-full" onClick={logout}>
+        <Button variant="outline" size="sm" className="w-full" onClick={() => { closeMobileMenu(); logout(); }}>
           <LogOut className="h-4 w-4 mr-2" />
           Cerrar Sesión
         </Button>
