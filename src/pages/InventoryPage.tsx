@@ -15,11 +15,10 @@ import {
 } from '@/components/ui/dialog';
 import { Plus, Search } from 'lucide-react';
 import { toast } from 'sonner';
-
-const typeLabels: Record<MovementType, string> = {
-  produccion: 'Producción', ingreso: 'Ingreso', ajuste: 'Ajuste',
-  venta: 'Venta', merma: 'Merma', transferencia: 'Transferencia',
-};
+import { MOVEMENT_TYPE_LABELS, PRODUCT_STATUS_LABELS, PRODUCT_STATUS_VARIANTS } from '@/lib/constants';
+import { formatDateShort, formatDateTime } from '@/lib/format';
+import { PageHeader } from '@/components/shared/PageHeader';
+import { StatusBadge } from '@/components/shared/StatusBadge';
 
 const typeColors: Record<MovementType, string> = {
   produccion: 'bg-blue-100 text-blue-800', ingreso: 'bg-green-100 text-green-800',
@@ -99,9 +98,8 @@ export function InventoryPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Inventario</h1>
+    <div className="space-y-8 animate-fade-in">
+      <PageHeader title="Inventario" description="Control de inventario y movimientos">
         <Dialog open={isCreateOpen} onOpenChange={(o) => { setIsCreateOpen(o); if (o) loadProducts(); }}>
           <Button onClick={() => { setIsCreateOpen(true);
             loadProducts();
@@ -147,7 +145,7 @@ export function InventoryPage() {
             </form>
           </DialogContent>
         </Dialog>
-      </div>
+      </PageHeader>
 
       <Tabs defaultValue="stock">
         <TabsList>
@@ -159,34 +157,53 @@ export function InventoryPage() {
         <TabsContent value="stock">
           <Card>
             <CardContent className="pt-6">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Producto</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Lote</TableHead>
-                    <TableHead className="text-right">Disponible</TableHead>
-                    <TableHead className="text-right">Reservado</TableHead>
-                    <TableHead>Estado</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {stock.map((p) => (
-                    <TableRow key={p._id}>
-                      <TableCell className="font-medium">{p.nombre}</TableCell>
-                      <TableCell className="capitalize">{p.tipo}</TableCell>
-                      <TableCell className="font-mono text-xs">{p.lote}</TableCell>
-                      <TableCell className="text-right">{p.cantidadDisponible}</TableCell>
-                      <TableCell className="text-right">{p.cantidadReservada}</TableCell>
-                      <TableCell>
-                        <Badge className={p.estado === 'disponible' ? 'bg-green-100 text-green-800' : p.estado === 'agotado' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}>
-                          {p.estado}
-                        </Badge>
-                      </TableCell>
+              {/* Vista cards en móvil */}
+              <div className="md:hidden space-y-3">
+                {stock.map((p) => (
+                  <Card key={p._id}>
+                    <CardContent className="pt-4">
+                      <div className="flex justify-between items-start gap-2">
+                        <p className="font-medium">{p.nombre}</p>
+                        <StatusBadge label={PRODUCT_STATUS_LABELS[p.estado]} variant={PRODUCT_STATUS_VARIANTS[p.estado]} />
+                      </div>
+                      <p className="text-sm text-muted-foreground capitalize">{p.tipo} · Lote {p.lote}</p>
+                      <div className="flex justify-between mt-2 text-sm">
+                        <span>Disponible: <strong>{p.cantidadDisponible}</strong></span>
+                        <span>Reservado: <strong>{p.cantidadReservada}</strong></span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+              {/* Tabla en desktop */}
+              <div className="hidden md:block overflow-x-auto rounded-2xl border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Producto</TableHead>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>Lote</TableHead>
+                      <TableHead className="text-right">Disponible</TableHead>
+                      <TableHead className="text-right">Reservado</TableHead>
+                      <TableHead>Estado</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {stock.map((p) => (
+                      <TableRow key={p._id}>
+                        <TableCell className="font-medium">{p.nombre}</TableCell>
+                        <TableCell className="capitalize">{p.tipo}</TableCell>
+                        <TableCell className="font-mono text-xs">{p.lote}</TableCell>
+                        <TableCell className="text-right">{p.cantidadDisponible}</TableCell>
+                        <TableCell className="text-right">{p.cantidadReservada}</TableCell>
+                        <TableCell>
+                          <StatusBadge label={PRODUCT_STATUS_LABELS[p.estado]} variant={PRODUCT_STATUS_VARIANTS[p.estado]} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -198,36 +215,65 @@ export function InventoryPage() {
                 <div className="flex justify-center py-10"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>
               ) : (
                 <>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Fecha</TableHead>
-                        <TableHead>Producto</TableHead>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Lote</TableHead>
-                        <TableHead className="text-right">Cantidad</TableHead>
-                        <TableHead className="text-right">Antes</TableHead>
-                        <TableHead className="text-right">Después</TableHead>
-                        <TableHead>Motivo</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {movements.map((m) => (
-                        <TableRow key={m._id}>
-                          <TableCell>{new Date(m.createdAt).toLocaleDateString('es-CL')}</TableCell>
-                          <TableCell>{m.producto == null ? '—' : typeof m.producto === 'string' ? m.producto : (m.producto as Product).nombre}</TableCell>
-                          <TableCell><Badge className={typeColors[m.tipo]}>{typeLabels[m.tipo]}</Badge></TableCell>
-                          <TableCell className="font-mono text-xs">{m.lote}</TableCell>
-                          <TableCell className={`text-right font-medium ${m.cantidad >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {m.cantidad >= 0 ? '+' : ''}{m.cantidad}
-                          </TableCell>
-                          <TableCell className="text-right">{m.cantidadAnterior}</TableCell>
-                          <TableCell className="text-right">{m.cantidadNueva}</TableCell>
-                          <TableCell className="max-w-[200px] truncate">{m.motivo}</TableCell>
+                  {/* Vista cards en móvil */}
+                  <div className="md:hidden space-y-3">
+                    {movements.length === 0 ? (
+                      <p className="text-center py-12 text-sm text-muted-foreground/70">No hay movimientos</p>
+                    ) : (
+                      movements.map((m) => (
+                        <Card key={m._id}>
+                          <CardContent className="pt-4">
+                            <div className="flex justify-between items-start gap-2">
+                              <Badge className={typeColors[m.tipo]}>{MOVEMENT_TYPE_LABELS[m.tipo]}</Badge>
+                              <span className={`font-medium text-sm ${m.cantidad >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {m.cantidad >= 0 ? '+' : ''}{m.cantidad}
+                              </span>
+                            </div>
+                            <p className="font-medium mt-2">{m.producto == null ? '—' : typeof m.producto === 'string' ? m.producto : (m.producto as Product).nombre}</p>
+                            <p className="text-xs font-mono text-muted-foreground">Lote {m.lote}</p>
+                            <p className="text-sm mt-2">{m.motivo}</p>
+                            <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                              <span>{formatDateShort(m.createdAt)}</span>
+                              <span>Antes: {m.cantidadAnterior} → Después: {m.cantidadNueva}</span>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))
+                    )}
+                  </div>
+                  {/* Tabla en desktop */}
+                  <div className="hidden md:block overflow-x-auto rounded-2xl border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Fecha</TableHead>
+                          <TableHead>Producto</TableHead>
+                          <TableHead>Tipo</TableHead>
+                          <TableHead>Lote</TableHead>
+                          <TableHead className="text-right">Cantidad</TableHead>
+                          <TableHead className="text-right">Antes</TableHead>
+                          <TableHead className="text-right">Después</TableHead>
+                          <TableHead>Motivo</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {movements.map((m) => (
+                          <TableRow key={m._id}>
+                            <TableCell>{formatDateShort(m.createdAt)}</TableCell>
+                            <TableCell>{m.producto == null ? '—' : typeof m.producto === 'string' ? m.producto : (m.producto as Product).nombre}</TableCell>
+                            <TableCell><Badge className={typeColors[m.tipo]}>{MOVEMENT_TYPE_LABELS[m.tipo]}</Badge></TableCell>
+                            <TableCell className="font-mono text-xs">{m.lote}</TableCell>
+                            <TableCell className={`text-right font-medium ${m.cantidad >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {m.cantidad >= 0 ? '+' : ''}{m.cantidad}
+                            </TableCell>
+                            <TableCell className="text-right">{m.cantidadAnterior}</TableCell>
+                            <TableCell className="text-right">{m.cantidadNueva}</TableCell>
+                            <TableCell className="max-w-[200px] truncate">{m.motivo}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                   <div className="flex justify-between items-center mt-4">
                     <p className="text-sm text-muted-foreground">Total: {total}</p>
                     <div className="flex gap-2">
@@ -246,7 +292,7 @@ export function InventoryPage() {
             <CardHeader>
               <CardTitle className="text-lg">Trazabilidad por Lote</CardTitle>
               <div className="flex gap-2 mt-2">
-                <Input placeholder="Código de lote..." value={searchLote} onChange={(e) => setSearchLote(e.target.value)} className="max-w-sm" />
+                <Input placeholder="Código de lote..." value={searchLote} onChange={(e) => setSearchLote(e.target.value)} className="max-w-sm rounded-xl" />
                 <Button onClick={handleTrace}><Search className="h-4 w-4 mr-2" />Buscar</Button>
               </div>
             </CardHeader>
@@ -262,16 +308,16 @@ export function InventoryPage() {
                     <div key={i} className="flex items-start gap-3 p-3 border rounded-lg">
                       <div className="h-2 w-2 rounded-full bg-primary mt-2" />
                       <div>
-                        <p className="font-medium text-sm">{typeLabels[m.tipo]} — {m.motivo}</p>
+                        <p className="font-medium text-sm">{MOVEMENT_TYPE_LABELS[m.tipo]} — {m.motivo}</p>
                         <p className="text-xs text-muted-foreground">
-                          {new Date(m.createdAt).toLocaleString('es-CL')} • Cant: {m.cantidad}
+                          {formatDateTime(m.createdAt)} • Cant: {m.cantidad}
                         </p>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-center text-muted-foreground py-10">Ingrese un código de lote para ver su trazabilidad</p>
+                <p className="text-center text-sm text-muted-foreground/70 py-12">Ingrese un código de lote para ver su trazabilidad</p>
               )}
             </CardContent>
           </Card>

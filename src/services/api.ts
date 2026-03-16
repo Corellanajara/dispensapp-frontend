@@ -78,6 +78,10 @@ export const productsAPI = {
   update: (id: string, data: Partial<Product>) =>
     api.put<Product>(`/products/${id}`, data),
   delete: (id: string) => api.delete(`/products/${id}`),
+  uploadImage: (id: string, formData: FormData) =>
+    api.post<Product>(`/products/${id}/image`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
 };
 
 // Orders
@@ -88,6 +92,32 @@ export const ordersAPI = {
   create: (data: Record<string, unknown>) => api.post<Order>('/orders', data),
   updateStatus: (id: string, data: { estado: string; observacion?: string }) =>
     api.patch<Order>(`/orders/${id}/status`, data),
+};
+
+// Payments (POS)
+export const paymentsAPI = {
+  providers: () => api.get<{ providers: string[] }>('/payments/providers'),
+  initiate: (orderId: string, data: { method: 'debito' | 'credito'; installments?: number }) =>
+    api.post(`/payments/orders/${orderId}/initiate`, data),
+  status: (orderId: string) =>
+    api.get(`/payments/orders/${orderId}/status`),
+  cancel: (orderId: string) =>
+    api.post(`/payments/orders/${orderId}/cancel`),
+};
+
+// Signatures (Firma Electrónica)
+export const signaturesAPI = {
+  providers: () => api.get<{ providers: string[] }>('/signatures/providers'),
+  uploadDocument: (orderId: string, formData: FormData) =>
+    api.post<Order>(`/signatures/orders/${orderId}/documents`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  listDocuments: (orderId: string) =>
+    api.get(`/signatures/orders/${orderId}/documents`),
+  requestSignature: (orderId: string, docId: string, data: { signerName: string; signerEmail: string; signerRut?: string; message?: string }) =>
+    api.post(`/signatures/orders/${orderId}/documents/${docId}/sign`, data),
+  signatureStatus: (orderId: string, docId: string) =>
+    api.get(`/signatures/orders/${orderId}/documents/${docId}/status`),
 };
 
 // Inventory
@@ -174,3 +204,12 @@ export const patientPortalAPI = {
 };
 
 export default api;
+
+// Helper: construye la URL completa de una imagen de producto
+const API_ORIGIN = 'https://dispensapp-backend-production-9a9a.up.railway.app';
+
+export function getProductImageUrl(imagen: string | undefined): string | null {
+  if (!imagen) return null;
+  if (imagen.startsWith('http')) return imagen; // URL de S3
+  return `${API_ORIGIN}${imagen}`; // Ruta local servida por el backend
+}

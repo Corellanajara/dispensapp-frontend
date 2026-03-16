@@ -17,6 +17,8 @@ import {
 } from '@/components/ui/select';
 import { Plus, Search, UserCheck, UserX } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatDateShort } from '@/lib/format';
+import { PageHeader } from '@/components/shared/PageHeader';
 
 const roleLabels: Record<UserRole, string> = {
   admin: 'Administrador', operador: 'Operador', produccion: 'Producción',
@@ -89,9 +91,8 @@ export function UsersPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Usuarios</h1>
+    <div className="space-y-8 animate-fade-in">
+      <PageHeader title="Usuarios" description="Gestión de usuarios del sistema">
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <Button onClick={() => setIsCreateOpen(true)}><Plus className="h-4 w-4 mr-2" />Nuevo Usuario</Button>
           <DialogContent>
@@ -136,7 +137,7 @@ export function UsersPage() {
             </form>
           </DialogContent>
         </Dialog>
-      </div>
+      </PageHeader>
 
       <Card>
         <CardHeader>
@@ -144,7 +145,7 @@ export function UsersPage() {
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input placeholder="Buscar usuarios..." value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="pl-10" />
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="pl-10 rounded-xl" />
             </div>
             <Select value={roleFilter} onValueChange={(v: string | null) => { setRoleFilter(v === 'all' || !v ? '' : v); setPage(1); }}>
               <SelectTrigger className="w-[180px]"><SelectValue placeholder="Rol" /></SelectTrigger>
@@ -160,47 +161,82 @@ export function UsersPage() {
             <div className="flex justify-center py-10"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>
           ) : (
             <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nombre</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>RUT</TableHead>
-                    <TableHead>Rol</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead>Último Acceso</TableHead>
-                    <TableHead>Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {users.map((u) => (
-                    <TableRow key={u._id}>
-                      <TableCell className="font-medium">{u.nombre} {u.apellido}</TableCell>
-                      <TableCell>{u.email}</TableCell>
-                      <TableCell className="font-mono">{u.rut}</TableCell>
-                      <TableCell><Badge className={roleColors[u.role]}>{roleLabels[u.role]}</Badge></TableCell>
-                      <TableCell>
-                        <Badge className={u.activo ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
-                          {u.activo ? 'Activo' : 'Inactivo'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{u.ultimoAcceso ? new Date(u.ultimoAcceso).toLocaleDateString('es-CL') : '-'}</TableCell>
-                      <TableCell>
-                        <Button variant="ghost" size="sm" onClick={() => handleToggleActive(u._id)}>
-                          {u.activo ? <UserX className="h-4 w-4 text-red-600" /> : <UserCheck className="h-4 w-4 text-green-600" />}
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {users.length === 0 && (
+              {/* Vista cards en móvil */}
+              <div className="md:hidden space-y-3">
+                {users.length === 0 ? (
+                  <p className="text-center py-12 text-sm text-muted-foreground/70">No se encontraron usuarios</p>
+                ) : (
+                  users.map((u) => (
+                    <Card key={u._id}>
+                      <CardContent className="pt-4">
+                        <div className="flex justify-between items-start gap-2">
+                          <p className="font-medium">{u.nombre} {u.apellido}</p>
+                          <div className="flex items-center gap-1">
+                            <Badge className={u.activo ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+                              {u.activo ? 'Activo' : 'Inactivo'}
+                            </Badge>
+                            <Button variant="ghost" size="sm" onClick={() => handleToggleActive(u._id)}>
+                              {u.activo ? <UserX className="h-4 w-4 text-red-600" /> : <UserCheck className="h-4 w-4 text-green-600" />}
+                            </Button>
+                          </div>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{u.email}</p>
+                        <p className="text-xs font-mono">RUT {u.rut}</p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <Badge className={roleColors[u.role]}>{roleLabels[u.role]}</Badge>
+                          {u.ultimoAcceso && (
+                            <span className="text-xs text-muted-foreground">Último acceso: {formatDateShort(u.ultimoAcceso)}</span>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+              {/* Tabla en desktop */}
+              <div className="hidden md:block overflow-x-auto rounded-2xl border">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">
-                        No se encontraron usuarios
-                      </TableCell>
+                      <TableHead>Nombre</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>RUT</TableHead>
+                      <TableHead>Rol</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead>Último Acceso</TableHead>
+                      <TableHead>Acciones</TableHead>
                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {users.map((u) => (
+                      <TableRow key={u._id}>
+                        <TableCell className="font-medium">{u.nombre} {u.apellido}</TableCell>
+                        <TableCell>{u.email}</TableCell>
+                        <TableCell className="font-mono">{u.rut}</TableCell>
+                        <TableCell><Badge className={roleColors[u.role]}>{roleLabels[u.role]}</Badge></TableCell>
+                        <TableCell>
+                          <Badge className={u.activo ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+                            {u.activo ? 'Activo' : 'Inactivo'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{u.ultimoAcceso ? formatDateShort(u.ultimoAcceso) : '-'}</TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="sm" onClick={() => handleToggleActive(u._id)}>
+                            {u.activo ? <UserX className="h-4 w-4 text-red-600" /> : <UserCheck className="h-4 w-4 text-green-600" />}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {users.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-12 text-sm text-muted-foreground/70">
+                          No se encontraron usuarios
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
               <div className="flex justify-between items-center mt-4">
                 <p className="text-sm text-muted-foreground">Total: {total}</p>
                 <div className="flex gap-2">

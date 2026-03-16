@@ -3,7 +3,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { PatientLayout } from '@/components/layout/PatientLayout';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
+import { CommandPalette } from '@/components/shared/CommandPalette';
 import { LoginPage } from '@/pages/LoginPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { PatientsPage } from '@/pages/PatientsPage';
@@ -29,6 +31,8 @@ const queryClient = new QueryClient({
     queries: {
       retry: 1,
       refetchOnWindowFocus: false,
+      staleTime: 30_000,
+      gcTime: 5 * 60_000,
     },
   },
 });
@@ -49,6 +53,7 @@ function App() {
               <Route path="/login" element={<AuthRedirect />} />
               <Route path="/registro-paciente" element={<PatientRegisterPage />} />
 
+              {/* Admin/Staff Layout (sidebar) */}
               <Route
                 element={
                   <ProtectedRoute>
@@ -67,16 +72,27 @@ function App() {
                 <Route path="/finanzas" element={<ProtectedRoute roles={['admin', 'finanzas']}><FinancePage /></ProtectedRoute>} />
                 <Route path="/usuarios" element={<ProtectedRoute roles={['admin']}><UsersPage /></ProtectedRoute>} />
                 <Route path="/auditoria" element={<ProtectedRoute roles={['admin']}><AuditPage /></ProtectedRoute>} />
-                <Route path="/portal" element={<ProtectedRoute roles={['paciente']}><PatientDashboardPage /></ProtectedRoute>} />
-                <Route path="/portal/catalogo" element={<ProtectedRoute roles={['paciente']}><CatalogPage /></ProtectedRoute>} />
-                <Route path="/portal/pedidos" element={<ProtectedRoute roles={['paciente']}><PatientOrdersPage /></ProtectedRoute>} />
-                <Route path="/portal/pedidos/nuevo" element={<ProtectedRoute roles={['paciente']}><PatientNewOrderPage /></ProtectedRoute>} />
-                <Route path="/portal/pedidos/:id" element={<ProtectedRoute roles={['paciente']}><PatientOrderDetailPage /></ProtectedRoute>} />
-                <Route path="/portal/perfil" element={<ProtectedRoute roles={['paciente']}><PatientProfilePage /></ProtectedRoute>} />
+              </Route>
+
+              {/* Patient Layout (top-nav) */}
+              <Route
+                element={
+                  <ProtectedRoute roles={['paciente']}>
+                    <PatientLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route path="/portal" element={<PatientDashboardPage />} />
+                <Route path="/portal/catalogo" element={<CatalogPage />} />
+                <Route path="/portal/pedidos" element={<PatientOrdersPage />} />
+                <Route path="/portal/pedidos/nuevo" element={<PatientNewOrderPage />} />
+                <Route path="/portal/pedidos/:id" element={<PatientOrderDetailPage />} />
+                <Route path="/portal/perfil" element={<PatientProfilePage />} />
               </Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+            <CommandPalette />
           </TooltipProvider>
         </AuthProvider>
       </BrowserRouter>

@@ -1,10 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import { ordersAPI, patientsAPI, productsAPI } from '@/services/api';
-import type { Order, OrderStatus, Patient, Product } from '@/types';
+import type { Order, Patient, Product } from '@/types';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { ORDER_STATUS_LABELS, ORDER_STATUS_VARIANTS } from '@/lib/constants';
+import { formatCurrency, formatDateShort } from '@/lib/format';
+import { PageHeader } from '@/components/shared/PageHeader';
+import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Label } from '@/components/ui/label';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -18,26 +21,6 @@ import {
 import { Plus, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
-
-const statusLabels: Record<OrderStatus, string> = {
-  pendiente_revision: 'Pendiente Revisión',
-  aprobado: 'Aprobado',
-  en_preparacion: 'En Preparación',
-  listo_retiro: 'Listo para Retiro',
-  en_despacho: 'En Despacho',
-  entregado: 'Entregado',
-  cancelado: 'Cancelado',
-};
-
-const statusColors: Record<OrderStatus, string> = {
-  pendiente_revision: 'bg-yellow-100 text-yellow-800',
-  aprobado: 'bg-blue-100 text-blue-800',
-  en_preparacion: 'bg-purple-100 text-purple-800',
-  listo_retiro: 'bg-cyan-100 text-cyan-800',
-  en_despacho: 'bg-orange-100 text-orange-800',
-  entregado: 'bg-green-100 text-green-800',
-  cancelado: 'bg-red-100 text-red-800',
-};
 
 export function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -109,18 +92,14 @@ export function OrdersPage() {
     setOrderItems(updated);
   };
 
-  const formatCurrency = (n: number) =>
-    new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', minimumFractionDigits: 0 }).format(n);
-
   const getPatientName = (p: string | Patient | null | undefined) => {
     if (p == null) return '—';
     return typeof p === 'string' ? p : `${p.nombre ?? ''} ${p.apellido ?? ''}`.trim() || '—';
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Pedidos</h1>
+    <div className="space-y-8 animate-fade-in">
+      <PageHeader title="Pedidos" description="Gestión de pedidos">
         <Dialog open={isCreateOpen} onOpenChange={(o) => { setIsCreateOpen(o); if (o) loadFormData(); }}>
           <Button onClick={() => { setIsCreateOpen(true);
             loadFormData();
@@ -193,7 +172,7 @@ export function OrdersPage() {
             </form>
           </DialogContent>
         </Dialog>
-      </div>
+      </PageHeader>
 
       <Card>
         <CardHeader>
@@ -202,7 +181,7 @@ export function OrdersPage() {
               <SelectTrigger className="w-[200px]"><SelectValue placeholder="Estado" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
-                {Object.entries(statusLabels).map(([k, v]) => (
+                {Object.entries(ORDER_STATUS_LABELS).map(([k, v]) => (
                   <SelectItem key={k} value={k}>{v}</SelectItem>
                 ))}
               </SelectContent>
@@ -216,47 +195,81 @@ export function OrdersPage() {
             </div>
           ) : (
             <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>N° Pedido</TableHead>
-                    <TableHead>Paciente</TableHead>
-                    <TableHead>Items</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                    <TableHead>Entrega</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead>Fecha</TableHead>
-                    <TableHead>Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {orders.map((o) => (
-                    <TableRow key={o._id}>
-                      <TableCell className="font-mono">{o.numeroPedido}</TableCell>
-                      <TableCell>{getPatientName(o.paciente)}</TableCell>
-                      <TableCell>{o.items.length} productos</TableCell>
-                      <TableCell className="text-right font-medium">{formatCurrency(o.total)}</TableCell>
-                      <TableCell className="capitalize">{o.tipoEntrega}</TableCell>
-                      <TableCell>
-                        <Badge className={statusColors[o.estado]}>{statusLabels[o.estado]}</Badge>
-                      </TableCell>
-                      <TableCell>{new Date(o.createdAt).toLocaleDateString('es-CL')}</TableCell>
-                      <TableCell>
-                        <Link to={`/pedidos/${o._id}`}>
-                          <Button variant="ghost" size="sm"><Eye className="h-4 w-4" /></Button>
-                        </Link>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {orders.length === 0 && (
+              {/* Vista cards en móvil */}
+              <div className="md:hidden space-y-3">
+                {orders.length === 0 ? (
+                  <p className="text-center py-12 text-sm text-muted-foreground/70">No se encontraron pedidos</p>
+                ) : (
+                  orders.map((o) => (
+                    <Link key={o._id} to={`/pedidos/${o._id}`}>
+                      <Card>
+                        <CardContent className="pt-4">
+                          <div className="flex justify-between items-start gap-2">
+                            <p className="font-mono font-medium">#{o.numeroPedido}</p>
+                            <StatusBadge label={ORDER_STATUS_LABELS[o.estado]} variant={ORDER_STATUS_VARIANTS[o.estado]} />
+                          </div>
+                          <p className="text-sm mt-1">{getPatientName(o.paciente)}</p>
+                          <div className="mt-2 flex justify-between text-sm text-muted-foreground">
+                            <span>{o.items.length} productos</span>
+                            <span className="capitalize">{o.tipoEntrega}</span>
+                          </div>
+                          <div className="mt-2 flex justify-between items-center">
+                            <span className="font-medium">{formatCurrency(o.total)}</span>
+                            <span className="text-xs">{formatDateShort(o.createdAt)}</span>
+                          </div>
+                          <Button variant="outline" size="sm" className="w-full mt-3">
+                            <Eye className="h-4 w-4 mr-2" /> Ver detalle
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  ))
+                )}
+              </div>
+              {/* Tabla en desktop */}
+              <div className="hidden md:block overflow-x-auto rounded-2xl border">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
-                        No se encontraron pedidos
-                      </TableCell>
+                      <TableHead>N° Pedido</TableHead>
+                      <TableHead>Paciente</TableHead>
+                      <TableHead>Items</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                      <TableHead>Entrega</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead>Acciones</TableHead>
                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {orders.map((o) => (
+                      <TableRow key={o._id}>
+                        <TableCell className="font-mono">{o.numeroPedido}</TableCell>
+                        <TableCell>{getPatientName(o.paciente)}</TableCell>
+                        <TableCell>{o.items.length} productos</TableCell>
+                        <TableCell className="text-right font-medium">{formatCurrency(o.total)}</TableCell>
+                        <TableCell className="capitalize">{o.tipoEntrega}</TableCell>
+                        <TableCell>
+                          <StatusBadge label={ORDER_STATUS_LABELS[o.estado]} variant={ORDER_STATUS_VARIANTS[o.estado]} />
+                        </TableCell>
+                        <TableCell>{formatDateShort(o.createdAt)}</TableCell>
+                        <TableCell>
+                          <Link to={`/pedidos/${o._id}`}>
+                            <Button variant="ghost" size="sm"><Eye className="h-4 w-4" /></Button>
+                          </Link>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {orders.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-12 text-sm text-muted-foreground/70">
+                          No se encontraron pedidos
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
               <div className="flex justify-between items-center mt-4">
                 <p className="text-sm text-muted-foreground">Total: {total} pedidos</p>
                 <div className="flex gap-2">

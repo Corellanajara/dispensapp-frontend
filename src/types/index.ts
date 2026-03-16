@@ -107,12 +107,57 @@ export type OrderStatus =
 
 export type DeliveryType = 'retiro' | 'despacho';
 
+export type PaymentStatus = 'pendiente' | 'procesando' | 'aprobado' | 'rechazado' | 'cancelado' | 'error';
+export type SignatureStatus = 'pendiente' | 'enviado' | 'firmado' | 'rechazado' | 'expirado' | 'error';
+
 export interface OrderItem {
   producto: string | Product;
   nombre: string;
   cantidad: number;
   precioUnitario: number;
   subtotal: number;
+}
+
+export interface PaymentAttempt {
+  _id?: string;
+  transactionId: string;
+  provider: string;
+  monto: number;
+  metodo: 'debito' | 'credito';
+  cuotas?: number;
+  estado: PaymentStatus;
+  ultimosDigitos?: string;
+  codigoAutorizacion?: string;
+  mensaje?: string;
+  fecha: string;
+}
+
+export interface OrderPayment {
+  estado: PaymentStatus;
+  montoTotal: number;
+  montoPagado: number;
+  intentos: PaymentAttempt[];
+}
+
+export interface OrderDocumentSignature {
+  signatureId: string;
+  provider: string;
+  estado: SignatureStatus;
+  signingUrl?: string;
+  firmadoPor?: string;
+  rutFirmante?: string;
+  fechaFirma?: string;
+  archivoFirmado?: string;
+}
+
+export interface OrderDocument {
+  _id: string;
+  tipo: string;
+  nombre: string;
+  archivo: string;
+  fechaSubida: string;
+  subidoPor?: string;
+  firma?: OrderDocumentSignature;
 }
 
 export interface Order {
@@ -134,8 +179,10 @@ export interface Order {
   fechaRetiroProgramado?: string;
   fechaEntrega?: string;
   observaciones?: string;
+  pago?: OrderPayment;
+  documentos?: OrderDocument[];
   historialEstados: {
-    estado: OrderStatus;
+    estado: string;
     fecha: string;
     usuario?: string;
     observacion?: string;

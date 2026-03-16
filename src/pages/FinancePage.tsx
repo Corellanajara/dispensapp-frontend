@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { financeAPI } from '@/services/api';
 import type { FinanceTransaction, User } from '@/types';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,6 +18,10 @@ import {
 } from '@/components/ui/select';
 import { Plus, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
+import { FINANCE_CATEGORY_LABELS } from '@/lib/constants';
+import { formatCurrency, formatDateShort } from '@/lib/format';
+import { PageHeader } from '@/components/shared/PageHeader';
+import { StatCard } from '@/components/shared/StatCard';
 
 interface Summary {
   ingresos: { total: number; cantidad: number };
@@ -25,13 +29,6 @@ interface Summary {
   balance: number;
   porCategoria: { _id: { tipo: string; categoria: string }; total: number }[];
 }
-
-const categoryLabels: Record<string, string> = {
-  produccion: 'Producción', ventas: 'Ventas', administracion: 'Administración',
-  logistica: 'Logística', marketing: 'Marketing', sueldos: 'Sueldos',
-  insumos: 'Insumos', proveedores: 'Proveedores', venta_productos: 'Venta de Productos',
-  pago_pedido: 'Pago de Pedido', otro: 'Otro',
-};
 
 export function FinancePage() {
   const [transactions, setTransactions] = useState<FinanceTransaction[]>([]);
@@ -41,9 +38,6 @@ export function FinancePage() {
   const [typeFilter, setTypeFilter] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-
-  const formatCurrency = (n: number) =>
-    new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', minimumFractionDigits: 0 }).format(n);
 
   const fetchTransactions = useCallback(async () => {
     setIsLoading(true);
@@ -94,9 +88,8 @@ export function FinancePage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Finanzas</h1>
+    <div className="space-y-8 animate-fade-in">
+      <PageHeader title="Finanzas" description="Gestión financiera">
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <Button onClick={() => setIsCreateOpen(true)}><Plus className="h-4 w-4 mr-2" />Nueva Transacción</Button>
           <DialogContent>
@@ -117,7 +110,7 @@ export function FinancePage() {
                 <div className="space-y-2">
                   <Label>Categoría</Label>
                   <select name="categoria" required className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
-                    {Object.entries(categoryLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    {Object.entries(FINANCE_CATEGORY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
                 </div>
                 <div className="space-y-2">
@@ -140,42 +133,41 @@ export function FinancePage() {
             </form>
           </DialogContent>
         </Dialog>
-      </div>
+      </PageHeader>
 
       {/* Summary Cards */}
       {summary && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Ingresos</CardTitle>
-              <TrendingUp className="h-4 w-4 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">{formatCurrency(summary.ingresos.total)}</div>
-              <p className="text-xs text-muted-foreground">{summary.ingresos.cantidad} transacciones</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Egresos</CardTitle>
-              <TrendingDown className="h-4 w-4 text-red-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-red-600">{formatCurrency(summary.egresos.total)}</div>
-              <p className="text-xs text-muted-foreground">{summary.egresos.cantidad} transacciones</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Balance</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className={`text-2xl font-bold ${summary.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {formatCurrency(summary.balance)}
-              </div>
-            </CardContent>
-          </Card>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div className="animate-fade-in" style={{ animationDelay: '0ms' }}>
+            <StatCard
+              title="Ingresos"
+              value={formatCurrency(summary.ingresos.total)}
+              subtitle={`${summary.ingresos.cantidad} transacciones`}
+              icon={TrendingUp}
+              tint="green"
+            />
+          </div>
+          <div className="animate-fade-in" style={{ animationDelay: '75ms' }}>
+            <StatCard
+              title="Egresos"
+              value={formatCurrency(summary.egresos.total)}
+              subtitle={`${summary.egresos.cantidad} transacciones`}
+              icon={TrendingDown}
+              tint="rose"
+            />
+          </div>
+          <div className="animate-fade-in" style={{ animationDelay: '150ms' }}>
+            <StatCard
+              title="Balance"
+              value={formatCurrency(summary.balance)}
+              icon={DollarSign}
+              tint="violet"
+              trend={{
+                value: summary.balance >= 0 ? 1 : -1,
+                label: summary.balance >= 0 ? 'positivo' : 'negativo',
+              }}
+            />
+          </div>
         </div>
       )}
 
@@ -202,45 +194,77 @@ export function FinancePage() {
                 <div className="flex justify-center py-10"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>
               ) : (
                 <>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Fecha</TableHead>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Descripción</TableHead>
-                        <TableHead>Categoría</TableHead>
-                        <TableHead className="text-right">Monto</TableHead>
-                        <TableHead>Usuario</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {transactions.map((t) => (
-                        <TableRow key={t._id}>
-                          <TableCell>{new Date(t.fecha).toLocaleDateString('es-CL')}</TableCell>
-                          <TableCell>
-                            <Badge className={t.tipo === 'ingreso' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
-                              {t.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>{t.descripcion}</TableCell>
-                          <TableCell>{categoryLabels[t.categoria] || t.categoria}</TableCell>
-                          <TableCell className={`text-right font-medium ${t.tipo === 'ingreso' ? 'text-green-600' : 'text-red-600'}`}>
-                            {t.tipo === 'ingreso' ? '+' : '-'}{formatCurrency(t.monto)}
-                          </TableCell>
-                          <TableCell>
-                            {t.usuario == null ? '—' : typeof t.usuario === 'string' ? t.usuario : `${(t.usuario as User).nombre ?? ''} ${(t.usuario as User).apellido ?? ''}`.trim() || '—'}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      {transactions.length === 0 && (
+                  {/* Vista cards en móvil */}
+                  <div className="md:hidden space-y-3">
+                    {transactions.length === 0 ? (
+                      <p className="text-center py-12 text-sm text-muted-foreground/70">No se encontraron transacciones</p>
+                    ) : (
+                      transactions.map((t) => (
+                        <Card key={t._id}>
+                          <CardContent className="pt-4">
+                            <div className="flex justify-between items-start gap-2">
+                              <Badge className={t.tipo === 'ingreso' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+                                {t.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'}
+                              </Badge>
+                              <span className={`font-medium ${t.tipo === 'ingreso' ? 'text-green-600' : 'text-red-600'}`}>
+                                {t.tipo === 'ingreso' ? '+' : '-'}{formatCurrency(t.monto)}
+                              </span>
+                            </div>
+                            <p className="font-medium mt-2">{t.descripcion}</p>
+                            <p className="text-sm text-muted-foreground">{FINANCE_CATEGORY_LABELS[t.categoria] || t.categoria}</p>
+                            <p className="text-xs text-muted-foreground mt-1">{formatDateShort(t.fecha)}</p>
+                            {t.usuario != null && (
+                              <p className="text-xs mt-1">
+                                {typeof t.usuario === 'string' ? t.usuario : `${(t.usuario as User).nombre ?? ''} ${(t.usuario as User).apellido ?? ''}`.trim() || '—'}
+                              </p>
+                            )}
+                          </CardContent>
+                        </Card>
+                      ))
+                    )}
+                  </div>
+                  {/* Tabla en desktop */}
+                  <div className="hidden md:block overflow-x-auto rounded-2xl border">
+                    <Table>
+                      <TableHeader>
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
-                            No se encontraron transacciones
-                          </TableCell>
+                          <TableHead>Fecha</TableHead>
+                          <TableHead>Tipo</TableHead>
+                          <TableHead>Descripción</TableHead>
+                          <TableHead>Categoría</TableHead>
+                          <TableHead className="text-right">Monto</TableHead>
+                          <TableHead>Usuario</TableHead>
                         </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {transactions.map((t) => (
+                          <TableRow key={t._id}>
+                            <TableCell>{formatDateShort(t.fecha)}</TableCell>
+                            <TableCell>
+                              <Badge className={t.tipo === 'ingreso' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+                                {t.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>{t.descripcion}</TableCell>
+                            <TableCell>{FINANCE_CATEGORY_LABELS[t.categoria] || t.categoria}</TableCell>
+                            <TableCell className={`text-right font-medium ${t.tipo === 'ingreso' ? 'text-green-600' : 'text-red-600'}`}>
+                              {t.tipo === 'ingreso' ? '+' : '-'}{formatCurrency(t.monto)}
+                            </TableCell>
+                            <TableCell>
+                              {t.usuario == null ? '—' : typeof t.usuario === 'string' ? t.usuario : `${(t.usuario as User).nombre ?? ''} ${(t.usuario as User).apellido ?? ''}`.trim() || '—'}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {transactions.length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={6} className="text-center py-12 text-sm text-muted-foreground/70">
+                              No se encontraron transacciones
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
                   <div className="flex justify-between items-center mt-4">
                     <p className="text-sm text-muted-foreground">Total: {total}</p>
                     <div className="flex gap-2">
@@ -261,7 +285,7 @@ export function FinancePage() {
                 <div key={i} className="flex justify-between items-center p-3 border-b last:border-0">
                   <div>
                     <span className="font-medium capitalize">{cat._id.tipo}</span>
-                    <span className="text-muted-foreground ml-2">{categoryLabels[cat._id.categoria] || cat._id.categoria}</span>
+                    <span className="text-muted-foreground ml-2">{FINANCE_CATEGORY_LABELS[cat._id.categoria] || cat._id.categoria}</span>
                   </div>
                   <span className={`font-bold ${cat._id.tipo === 'ingreso' ? 'text-green-600' : 'text-red-600'}`}>
                     {formatCurrency(cat.total)}
@@ -269,7 +293,7 @@ export function FinancePage() {
                 </div>
               ))}
               {(!summary || summary.porCategoria.length === 0) && (
-                <p className="text-center text-muted-foreground py-10">No hay datos</p>
+                <p className="text-center text-sm text-muted-foreground/70 py-12">No hay datos</p>
               )}
             </CardContent>
           </Card>

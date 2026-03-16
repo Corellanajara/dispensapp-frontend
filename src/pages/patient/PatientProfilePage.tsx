@@ -1,11 +1,10 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { patientPortalAPI } from '@/services/api';
 import type { Patient, PatientDocument } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -13,41 +12,17 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Edit, Save, X, Upload, FileText, Loader2 } from 'lucide-react';
+import { Edit, Save, X, Upload, FileText, Loader2, Shield, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
-
-const patientStatusLabels: Record<string, string> = {
-  pendiente: 'Pendiente de Aprobación',
-  aprobado: 'Aprobado',
-  rechazado: 'Rechazado',
-  suspendido: 'Suspendido',
-};
-
-const patientStatusColors: Record<string, string> = {
-  pendiente: 'bg-yellow-100 text-yellow-800',
-  aprobado: 'bg-green-100 text-green-800',
-  rechazado: 'bg-red-100 text-red-800',
-  suspendido: 'bg-gray-100 text-gray-800',
-};
-
-const docStatusLabels: Record<string, string> = {
-  pendiente: 'Pendiente',
-  aprobado: 'Aprobado',
-  rechazado: 'Rechazado',
-};
-
-const docStatusColors: Record<string, string> = {
-  pendiente: 'bg-yellow-100 text-yellow-800',
-  aprobado: 'bg-green-100 text-green-800',
-  rechazado: 'bg-red-100 text-red-800',
-};
-
-const docTypeLabels: Record<string, string> = {
-  receta_medica: 'Receta Médica',
-  certificado_antecedentes: 'Certificado de Antecedentes',
-  cedula_identidad: 'Cédula de Identidad',
-  otro: 'Otro',
-};
+import { PATIENT_STATUS_LABELS, PATIENT_STATUS_VARIANTS, DOCUMENT_TYPE_LABELS, DOCUMENT_STATUS_LABELS, DOCUMENT_STATUS_VARIANTS } from '@/lib/constants';
+import { REQUIRED_PATIENT_DOCUMENTS } from '@/lib/patient-documents';
+import { getSignatureData, saveSignature, isDocumentSigned } from '@/lib/signatures';
+import { formatCurrency, formatDateShort } from '@/lib/format';
+import { PageHeader } from '@/components/shared/PageHeader';
+import { StatusBadge } from '@/components/shared/StatusBadge';
+import { SignatureModal } from '@/components/shared/SignatureModal';
+import { DocumentRequirementCard } from '@/components/shared/DocumentRequirementCard';
+import { Badge } from '@/components/ui/badge';
 
 export function PatientProfilePage() {
   const [patient, setPatient] = useState<Patient | null>(null);
@@ -79,8 +54,10 @@ export function PatientProfilePage() {
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  const formatCurrency = (n: number) =>
-    new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', minimumFractionDigits: 0 }).format(n);
+  const [signingDoc, setSigningDoc] = useState<string | null>(null);
+  const [uploadingLegalDoc, setUploadingLegalDoc] = useState<string | null>(null);
+  const [pendingRequirementId, setPendingRequirementId] = useState<string | null>(null);
+  const legalFileRef = useRef<HTMLInputElement>(null);
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -181,6 +158,53 @@ export function PatientProfilePage() {
     }
   };
 
+  const handleLegalUpload = (requirementId: string) => {
+    setPendingRequirementId(requirementId);
+    legalFileRef.current?.click();
+  };
+
+  const handleLegalFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !pendingRequirementId) return;
+
+    setUploadingLegalDoc(pendingRequirementId);
+    try {
+      const formData = new FormData();
+      formData.append('archivo', file);
+      formData.append('tipo', 'otro');
+      formData.append('nombre', pendingRequirementId);
+      const { data } = await patientPortalAPI.uploadDocument(formData);
+      setPatient(data);
+      toast.success('Documento subido correctamente');
+    } catch {
+      toast.error('Error al subir el documento');
+    } finally {
+      setUploadingLegalDoc(null);
+      setPendingRequirementId(null);
+      e.target.value = '';
+    }
+  };
+
+  const handleLegalSign = (data: { nombre: string; rut: string }) => {
+    if (!signingDoc) return;
+    saveSignature(signingDoc, data);
+    setSigningDoc(null);
+    toast.success('Documento firmado correctamente');
+  };
+
+  const completedLegalDocs = patient
+    ? REQUIRED_PATIENT_DOCUMENTS.filter((req) => {
+        const uploaded = patient.documentos?.find((d) => d.nombre === req.id);
+        return uploaded && isDocumentSigned(req.id);
+      })
+    : [];
+  const totalRequired = REQUIRED_PATIENT_DOCUMENTS.length;
+  const allLegalComplete = completedLegalDocs.length === totalRequired;
+
+  const signingDocLabel = signingDoc
+    ? REQUIRED_PATIENT_DOCUMENTS.find((r) => r.id === signingDoc)?.label ?? ''
+    : '';
+
   if (isLoading) {
     return (
       <div className="flex justify-center py-20">
@@ -194,19 +218,16 @@ export function PatientProfilePage() {
   }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Mi Perfil</h1>
+    <div className="space-y-8 animate-fade-in">
+      <PageHeader title="Mi Perfil" />
 
-      {/* Account Status */}
       <Card>
         <CardHeader>
           <CardTitle>Estado de Cuenta</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-4">
           <div className="flex items-center gap-3">
-            <Badge className={patientStatusColors[patient.estado]}>
-              {patientStatusLabels[patient.estado]}
-            </Badge>
+            <StatusBadge label={PATIENT_STATUS_LABELS[patient.estado]} variant={PATIENT_STATUS_VARIANTS[patient.estado]} />
           </div>
           <p className="text-sm text-muted-foreground">
             {patient.estado === 'aprobado'
@@ -226,7 +247,6 @@ export function PatientProfilePage() {
         </CardContent>
       </Card>
 
-      {/* Personal Info */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Datos Personales</CardTitle>
@@ -237,37 +257,37 @@ export function PatientProfilePage() {
             </Button>
           )}
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1">
+        <CardContent className="space-y-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="space-y-1.5">
               <Label className="text-muted-foreground text-xs">Nombre</Label>
               <p className="font-medium">{patient.nombre}</p>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label className="text-muted-foreground text-xs">Apellido</Label>
               <p className="font-medium">{patient.apellido}</p>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label className="text-muted-foreground text-xs">RUT</Label>
               <p className="font-medium">{patient.rut}</p>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label className="text-muted-foreground text-xs">Email</Label>
               <p className="font-medium">{patient.email}</p>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label className="text-muted-foreground text-xs">Fecha de Nacimiento</Label>
-              <p className="font-medium">{new Date(patient.fechaNacimiento).toLocaleDateString('es-CL')}</p>
+              <p className="font-medium">{formatDateShort(patient.fechaNacimiento)}</p>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label className="text-muted-foreground text-xs">Teléfono</Label>
               {editingPhone ? (
                 <div className="flex items-center gap-2">
-                  <Input value={telefono} onChange={(e) => setTelefono(e.target.value)} className="h-8" />
-                  <Button size="sm" className="h-8" onClick={handleSavePhone} disabled={isSaving}>
+                  <Input value={telefono} onChange={(e) => setTelefono(e.target.value)} className="h-9 rounded-xl" />
+                  <Button size="sm" className="h-9" onClick={handleSavePhone} disabled={isSaving}>
                     <Save className="h-3 w-3" />
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-8" onClick={() => { setEditingPhone(false); setTelefono(patient.telefono || ''); }}>
+                  <Button variant="ghost" size="sm" className="h-9" onClick={() => { setEditingPhone(false); setTelefono(patient.telefono || ''); }}>
                     <X className="h-3 w-3" />
                   </Button>
                 </div>
@@ -279,7 +299,6 @@ export function PatientProfilePage() {
         </CardContent>
       </Card>
 
-      {/* Address */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Dirección</CardTitle>
@@ -312,30 +331,30 @@ export function PatientProfilePage() {
         </CardHeader>
         <CardContent>
           {editingAddress ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="space-y-2">
                 <Label>Calle</Label>
-                <Input value={direccion.calle} onChange={(e) => setDireccion({ ...direccion, calle: e.target.value })} />
+                <Input value={direccion.calle} onChange={(e) => setDireccion({ ...direccion, calle: e.target.value })} className="rounded-xl" />
               </div>
               <div className="space-y-2">
                 <Label>Número</Label>
-                <Input value={direccion.numero} onChange={(e) => setDireccion({ ...direccion, numero: e.target.value })} />
+                <Input value={direccion.numero} onChange={(e) => setDireccion({ ...direccion, numero: e.target.value })} className="rounded-xl" />
               </div>
               <div className="space-y-2">
                 <Label>Comuna</Label>
-                <Input value={direccion.comuna} onChange={(e) => setDireccion({ ...direccion, comuna: e.target.value })} />
+                <Input value={direccion.comuna} onChange={(e) => setDireccion({ ...direccion, comuna: e.target.value })} className="rounded-xl" />
               </div>
               <div className="space-y-2">
                 <Label>Ciudad</Label>
-                <Input value={direccion.ciudad} onChange={(e) => setDireccion({ ...direccion, ciudad: e.target.value })} />
+                <Input value={direccion.ciudad} onChange={(e) => setDireccion({ ...direccion, ciudad: e.target.value })} className="rounded-xl" />
               </div>
               <div className="space-y-2 md:col-span-2">
                 <Label>Región</Label>
-                <Input value={direccion.region} onChange={(e) => setDireccion({ ...direccion, region: e.target.value })} />
+                <Input value={direccion.region} onChange={(e) => setDireccion({ ...direccion, region: e.target.value })} className="rounded-xl" />
               </div>
             </div>
           ) : (
-            <div className="space-y-2 text-sm">
+            <div className="space-y-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Calle:</span>
                 <span>{patient.direccion?.calle} {patient.direccion?.numero}</span>
@@ -357,7 +376,6 @@ export function PatientProfilePage() {
         </CardContent>
       </Card>
 
-      {/* Doctor */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Médico Tratante</CardTitle>
@@ -388,22 +406,22 @@ export function PatientProfilePage() {
         </CardHeader>
         <CardContent>
           {editingDoctor ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="space-y-2 md:col-span-2">
                 <Label>Nombre</Label>
-                <Input value={medicoTratante.nombre} onChange={(e) => setMedicoTratante({ ...medicoTratante, nombre: e.target.value })} />
+                <Input value={medicoTratante.nombre} onChange={(e) => setMedicoTratante({ ...medicoTratante, nombre: e.target.value })} className="rounded-xl" />
               </div>
               <div className="space-y-2">
                 <Label>Especialidad</Label>
-                <Input value={medicoTratante.especialidad} onChange={(e) => setMedicoTratante({ ...medicoTratante, especialidad: e.target.value })} />
+                <Input value={medicoTratante.especialidad} onChange={(e) => setMedicoTratante({ ...medicoTratante, especialidad: e.target.value })} className="rounded-xl" />
               </div>
               <div className="space-y-2">
                 <Label>Teléfono</Label>
-                <Input value={medicoTratante.telefono} onChange={(e) => setMedicoTratante({ ...medicoTratante, telefono: e.target.value })} />
+                <Input value={medicoTratante.telefono} onChange={(e) => setMedicoTratante({ ...medicoTratante, telefono: e.target.value })} className="rounded-xl" />
               </div>
             </div>
           ) : (
-            <div className="space-y-2 text-sm">
+            <div className="space-y-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Nombre:</span>
                 <span>{patient.medicoTratante?.nombre}</span>
@@ -425,7 +443,74 @@ export function PatientProfilePage() {
         </CardContent>
       </Card>
 
-      {/* Documents */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-indigo-500" />
+              Documentos Legales
+            </CardTitle>
+            <Badge
+              variant="outline"
+              className={
+                allLegalComplete
+                  ? 'border-emerald-500/30 text-emerald-600 bg-emerald-500/10'
+                  : 'border-amber-500/30 text-amber-600 bg-amber-500/10'
+              }
+            >
+              {completedLegalDocs.length} de {totalRequired} completados
+            </Badge>
+          </div>
+          <p className="text-sm text-muted-foreground mt-1">
+            Debes subir y firmar los siguientes documentos para realizar pedidos
+          </p>
+          {!allLegalComplete && (
+            <div className="mt-3 flex items-start gap-2 rounded-lg bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>Completa todos los documentos legales para poder realizar pedidos.</span>
+            </div>
+          )}
+          {allLegalComplete && (
+            <div className="mt-3 flex items-start gap-2 rounded-lg bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-400">
+              <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>Todos los documentos están completos. Puedes realizar pedidos.</span>
+            </div>
+          )}
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {REQUIRED_PATIENT_DOCUMENTS.map((req) => {
+            const uploadedDoc = patient.documentos?.find((d) => d.nombre === req.id);
+            const sigData = getSignatureData(req.id);
+            return (
+              <DocumentRequirementCard
+                key={req.id}
+                requirement={req}
+                uploadedDoc={uploadedDoc}
+                signatureData={sigData}
+                onUpload={() => handleLegalUpload(req.id)}
+                onSign={() => setSigningDoc(req.id)}
+                isUploading={uploadingLegalDoc === req.id}
+              />
+            );
+          })}
+        </CardContent>
+      </Card>
+
+      <input
+        ref={legalFileRef}
+        type="file"
+        className="hidden"
+        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+        onChange={handleLegalFileChange}
+      />
+
+      <SignatureModal
+        open={!!signingDoc}
+        onOpenChange={(open) => { if (!open) setSigningDoc(null); }}
+        documentLabel={signingDocLabel}
+        onSign={handleLegalSign}
+      />
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Documentos</CardTitle>
@@ -435,26 +520,24 @@ export function PatientProfilePage() {
           </Button>
         </CardHeader>
         <CardContent>
-          {patient.documentos.length === 0 ? (
+          {patient.documentos.filter((d) => !REQUIRED_PATIENT_DOCUMENTS.some((r) => r.id === d.nombre)).length === 0 ? (
             <p className="text-center py-6 text-muted-foreground">No tienes documentos subidos</p>
           ) : (
             <div className="space-y-3">
-              {patient.documentos.map((doc: PatientDocument) => (
-                <div key={doc._id} className="flex items-center justify-between p-3 border rounded-lg">
+              {patient.documentos.filter((d) => !REQUIRED_PATIENT_DOCUMENTS.some((r) => r.id === d.nombre)).map((doc: PatientDocument) => (
+                <div key={doc._id} className="flex items-center justify-between p-4 border border-border/60 rounded-xl">
                   <div className="flex items-center gap-3">
                     <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
                     <div>
                       <p className="font-medium text-sm">{doc.nombre}</p>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>{docTypeLabels[doc.tipo] || doc.tipo}</span>
+                        <span>{DOCUMENT_TYPE_LABELS[doc.tipo] || doc.tipo}</span>
                         <span>•</span>
-                        <span>{new Date(doc.fechaSubida).toLocaleDateString('es-CL')}</span>
+                        <span>{formatDateShort(doc.fechaSubida)}</span>
                       </div>
                     </div>
                   </div>
-                  <Badge className={docStatusColors[doc.estado]}>
-                    {docStatusLabels[doc.estado]}
-                  </Badge>
+                  <StatusBadge label={DOCUMENT_STATUS_LABELS[doc.estado] || doc.estado} variant={DOCUMENT_STATUS_VARIANTS[doc.estado] || ''} />
                 </div>
               ))}
             </div>
@@ -462,9 +545,8 @@ export function PatientProfilePage() {
         </CardContent>
       </Card>
 
-      {/* Upload Dialog */}
       <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
-        <DialogContent>
+        <DialogContent className="rounded-2xl">
           <DialogHeader>
             <DialogTitle>Subir Documento</DialogTitle>
           </DialogHeader>
@@ -476,7 +558,7 @@ export function PatientProfilePage() {
                   <SelectValue placeholder="Seleccionar tipo..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(docTypeLabels).map(([k, v]) => (
+                  {Object.entries(DOCUMENT_TYPE_LABELS).map(([k, v]) => (
                     <SelectItem key={k} value={k}>{v}</SelectItem>
                   ))}
                 </SelectContent>
@@ -488,6 +570,7 @@ export function PatientProfilePage() {
                 value={uploadNombre}
                 onChange={(e) => setUploadNombre(e.target.value)}
                 placeholder="Ej: Receta Dr. Pérez - Marzo 2026"
+                className="rounded-xl"
               />
             </div>
             <div className="space-y-2">
@@ -496,6 +579,7 @@ export function PatientProfilePage() {
                 type="file"
                 accept=".pdf,.jpg,.jpeg,.png"
                 onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                className="rounded-xl"
               />
             </div>
             <Separator />

@@ -1,5 +1,5 @@
+# Usado cuando en Netlify tienes "Base directory" = frontend. No pongas base aquí.
 [build]
-  base = "frontend"
   publish = "dist"
   command = "npm run build"
 

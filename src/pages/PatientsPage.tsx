@@ -1,10 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import { patientsAPI } from '@/services/api';
-import type { Patient, PatientStatus } from '@/types';
+import type { Patient } from '@/types';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { PATIENT_STATUS_LABELS, PATIENT_STATUS_VARIANTS } from '@/lib/constants';
+import { PageHeader } from '@/components/shared/PageHeader';
+import { StatusBadge } from '@/components/shared/StatusBadge';
 import {
   Table,
   TableBody,
@@ -30,20 +32,6 @@ import { Label } from '@/components/ui/label';
 import { Plus, Search, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
-
-const statusColors: Record<PatientStatus, string> = {
-  pendiente: 'bg-yellow-100 text-yellow-800',
-  aprobado: 'bg-green-100 text-green-800',
-  rechazado: 'bg-red-100 text-red-800',
-  suspendido: 'bg-gray-100 text-gray-800',
-};
-
-const statusLabels: Record<PatientStatus, string> = {
-  pendiente: 'Pendiente',
-  aprobado: 'Aprobado',
-  rechazado: 'Rechazado',
-  suspendido: 'Suspendido',
-};
 
 export function PatientsPage() {
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -112,9 +100,8 @@ export function PatientsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Pacientes</h1>
+    <div className="space-y-8 animate-fade-in">
+      <PageHeader title="Pacientes" description="Gestión de pacientes registrados">
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <Button onClick={() => setIsCreateOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
@@ -205,7 +192,7 @@ export function PatientsPage() {
             </form>
           </DialogContent>
         </Dialog>
-      </div>
+      </PageHeader>
 
       <Card>
         <CardHeader>
@@ -216,7 +203,7 @@ export function PatientsPage() {
                 placeholder="Buscar por nombre, apellido o RUT..."
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                className="pl-10"
+                className="pl-10 rounded-xl"
               />
             </div>
             <Select value={statusFilter} onValueChange={(v: string | null) => { setStatusFilter(v === 'all' || !v ? '' : v); setPage(1); }}>
@@ -240,51 +227,80 @@ export function PatientsPage() {
             </div>
           ) : (
             <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>RUT</TableHead>
-                    <TableHead>Nombre</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Teléfono</TableHead>
-                    <TableHead>Médico</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead>Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {patients.map((patient) => (
-                    <TableRow key={patient._id}>
-                      <TableCell className="font-mono">{patient.rut}</TableCell>
-                      <TableCell className="font-medium">
-                        {patient.nombre} {patient.apellido}
-                      </TableCell>
-                      <TableCell>{patient.email}</TableCell>
-                      <TableCell>{patient.telefono}</TableCell>
-                      <TableCell>{patient.medicoTratante?.nombre ?? '—'}</TableCell>
-                      <TableCell>
-                        <Badge className={statusColors[patient.estado]}>
-                          {statusLabels[patient.estado]}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Link to={`/pacientes/${patient._id}`}>
-                          <Button variant="ghost" size="sm">
-                            <Eye className="h-4 w-4" />
+              {/* Vista cards en móvil */}
+              <div className="md:hidden space-y-3">
+                {patients.length === 0 ? (
+                  <p className="text-center py-12 text-sm text-muted-foreground/70">No se encontraron pacientes</p>
+                ) : (
+                  patients.map((patient) => (
+                    <Link key={patient._id} to={`/pacientes/${patient._id}`}>
+                      <Card>
+                        <CardContent className="pt-4">
+                          <div className="flex justify-between items-start gap-2">
+                            <p className="font-medium">{patient.nombre} {patient.apellido}</p>
+                            <StatusBadge label={PATIENT_STATUS_LABELS[patient.estado]} variant={PATIENT_STATUS_VARIANTS[patient.estado]} />
+                          </div>
+                          <p className="text-xs font-mono text-muted-foreground mt-1">RUT {patient.rut}</p>
+                          <div className="mt-2 space-y-1 text-sm">
+                            <p className="truncate">{patient.email}</p>
+                            <p>{patient.telefono}</p>
+                            <p className="text-muted-foreground">Médico: {patient.medicoTratante?.nombre ?? '—'}</p>
+                          </div>
+                          <Button variant="outline" size="sm" className="w-full mt-3">
+                            <Eye className="h-4 w-4 mr-2" /> Ver detalle
                           </Button>
-                        </Link>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {patients.length === 0 && (
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  ))
+                )}
+              </div>
+              {/* Tabla en desktop */}
+              <div className="hidden md:block overflow-x-auto rounded-2xl border">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">
-                        No se encontraron pacientes
-                      </TableCell>
+                      <TableHead>RUT</TableHead>
+                      <TableHead>Nombre</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Teléfono</TableHead>
+                      <TableHead>Médico</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead>Acciones</TableHead>
                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {patients.map((patient) => (
+                      <TableRow key={patient._id}>
+                        <TableCell className="font-mono">{patient.rut}</TableCell>
+                        <TableCell className="font-medium">
+                          {patient.nombre} {patient.apellido}
+                        </TableCell>
+                        <TableCell>{patient.email}</TableCell>
+                        <TableCell>{patient.telefono}</TableCell>
+                        <TableCell>{patient.medicoTratante?.nombre ?? '—'}</TableCell>
+                        <TableCell>
+                          <StatusBadge label={PATIENT_STATUS_LABELS[patient.estado]} variant={PATIENT_STATUS_VARIANTS[patient.estado]} />
+                        </TableCell>
+                        <TableCell>
+                          <Link to={`/pacientes/${patient._id}`}>
+                            <Button variant="ghost" size="sm">
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </Link>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {patients.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-12 text-sm text-muted-foreground/70">
+                          No se encontraron pacientes
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
               <div className="flex justify-between items-center mt-4">
                 <p className="text-sm text-muted-foreground">
                   Total: {total} pacientes

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { patientPortalAPI } from '@/services/api';
+import { patientPortalAPI, getProductImageUrl } from '@/services/api';
 import type { Patient, Product, ProductType } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,16 +10,9 @@ import {
 } from '@/components/ui/select';
 import { AlertCircle, Package } from 'lucide-react';
 import { toast } from 'sonner';
-
-const typeLabels: Record<ProductType, string> = {
-  flor: 'Flor',
-  aceite: 'Aceite',
-  crema: 'Crema',
-  capsula: 'Cápsula',
-  tintura: 'Tintura',
-  comestible: 'Comestible',
-  otro: 'Otro',
-};
+import { PRODUCT_TYPE_LABELS } from '@/lib/constants';
+import { formatCurrency } from '@/lib/format';
+import { PageHeader } from '@/components/shared/PageHeader';
 
 const typeColors: Record<ProductType, string> = {
   flor: 'bg-green-100 text-green-800',
@@ -38,9 +31,6 @@ export function CatalogPage() {
   const [page, setPage] = useState(1);
   const [typeFilter, setTypeFilter] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-
-  const formatCurrency = (n: number) =>
-    new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', minimumFractionDigits: 0 }).format(n);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -69,7 +59,7 @@ export function CatalogPage() {
   const totalPages = Math.ceil(total / 12);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 animate-fade-in">
       {!isApproved && patient && (
         <Alert>
           <AlertCircle className="h-4 w-4" />
@@ -79,55 +69,67 @@ export function CatalogPage() {
         </Alert>
       )}
 
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <h1 className="text-3xl font-bold">Catálogo de Productos</h1>
+      <PageHeader title="Catálogo de Productos">
         <Select value={typeFilter} onValueChange={(v: string | null) => { setTypeFilter(v === 'all' || !v ? '' : v); setPage(1); }}>
-          <SelectTrigger className="w-[200px]">
+          <SelectTrigger className="w-[200px] rounded-xl h-11">
             <SelectValue placeholder="Tipo de producto" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos</SelectItem>
-            {Object.entries(typeLabels).map(([k, v]) => (
+            {Object.entries(PRODUCT_TYPE_LABELS).map(([k, v]) => (
               <SelectItem key={k} value={k}>{v}</SelectItem>
             ))}
           </SelectContent>
         </Select>
-      </div>
+      </PageHeader>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {[...Array(6)].map((_, i) => (
             <Card key={i}>
               <CardContent className="p-6">
-                <div className="h-40 animate-pulse bg-muted rounded" />
+                <div className="h-40 animate-pulse bg-muted rounded-xl" />
               </CardContent>
             </Card>
           ))}
         </div>
       ) : products.length === 0 ? (
         <Card>
-          <CardContent className="py-12 text-center">
+          <CardContent className="py-14 text-center">
             <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <p className="text-muted-foreground">No se encontraron productos</p>
           </CardContent>
         </Card>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {products.map((product) => (
-              <Card key={product._id} className="flex flex-col">
-                <CardHeader className="pb-3">
+              <Card key={product._id} className="flex flex-col overflow-hidden">
+                {getProductImageUrl(product.imagen) ? (
+                  <div className="h-48 w-full overflow-hidden bg-muted p-3 pb-0">
+                    <img
+                      src={getProductImageUrl(product.imagen)!}
+                      alt={product.nombre}
+                      className="h-full w-full object-cover rounded-xl shadow-sm"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex h-48 w-full items-center justify-center bg-muted/50 m-3 mb-0 rounded-xl">
+                    <Package className="h-12 w-12 text-muted-foreground/30" />
+                  </div>
+                )}
+                <CardHeader className="pb-3 pt-4">
                   <div className="flex items-center justify-between mb-2">
-                    <Badge className={typeColors[product.tipo]}>
-                      {typeLabels[product.tipo]}
+                    <Badge className={`${typeColors[product.tipo]} rounded-full`}>
+                      {PRODUCT_TYPE_LABELS[product.tipo]}
                     </Badge>
                     {product.cantidadDisponible <= 0 && (
-                      <Badge variant="destructive">Agotado</Badge>
+                      <Badge variant="destructive" className="rounded-full">Agotado</Badge>
                     )}
                   </div>
                   <CardTitle className="text-lg">{product.nombre}</CardTitle>
                 </CardHeader>
-                <CardContent className="flex-1 space-y-3">
+                <CardContent className="flex-1 space-y-3 pb-5">
                   {product.descripcion && (
                     <p className="text-sm text-muted-foreground line-clamp-2">{product.descripcion}</p>
                   )}
@@ -139,7 +141,7 @@ export function CatalogPage() {
                   {product.usoTerapeutico && (
                     <p className="text-xs text-muted-foreground italic">{product.usoTerapeutico}</p>
                   )}
-                  <div className="pt-2 border-t flex items-center justify-between">
+                  <div className="pt-3 border-t border-border/60 flex items-center justify-between">
                     <span className="text-lg font-bold text-primary">{formatCurrency(product.precio)}</span>
                     <span className="text-sm text-muted-foreground">
                       Disponible: {product.cantidadDisponible} unidades
@@ -150,20 +152,19 @@ export function CatalogPage() {
             ))}
           </div>
 
-          {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center pt-2">
               <p className="text-sm text-muted-foreground">
                 {total} productos encontrados
               </p>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+                <Button variant="outline" size="sm" className="rounded-xl" disabled={page <= 1} onClick={() => setPage(page - 1)}>
                   Anterior
                 </Button>
-                <span className="flex items-center text-sm text-muted-foreground px-2">
+                <span className="flex items-center text-sm text-muted-foreground px-3">
                   {page} de {totalPages}
                 </span>
-                <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
+                <Button variant="outline" size="sm" className="rounded-xl" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
                   Siguiente
                 </Button>
               </div>

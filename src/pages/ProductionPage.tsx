@@ -1,10 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import { productionAPI, productsAPI } from '@/services/api';
-import type { Production, ProductionStatus, Product } from '@/types';
+import type { Production, Product } from '@/types';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { PRODUCTION_STATUS_LABELS, PRODUCTION_STATUS_VARIANTS } from '@/lib/constants';
+import { formatDateShort } from '@/lib/format';
+import { PageHeader } from '@/components/shared/PageHeader';
+import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Label } from '@/components/ui/label';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -17,14 +20,6 @@ import {
 } from '@/components/ui/select';
 import { Plus, CheckCircle, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
-
-const statusLabels: Record<ProductionStatus, string> = {
-  en_proceso: 'En Proceso', completado: 'Completado', cancelado: 'Cancelado',
-};
-
-const statusColors: Record<ProductionStatus, string> = {
-  en_proceso: 'bg-blue-100 text-blue-800', completado: 'bg-green-100 text-green-800', cancelado: 'bg-red-100 text-red-800',
-};
 
 export function ProductionPage() {
   const [productions, setProductions] = useState<Production[]>([]);
@@ -128,9 +123,8 @@ export function ProductionPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Producción</h1>
+    <div className="space-y-8 animate-fade-in">
+      <PageHeader title="Producción" description="Control de lotes de producción">
         <Dialog open={isCreateOpen} onOpenChange={(o) => { setIsCreateOpen(o); if (o) loadProducts(); }}>
           <Button onClick={() => { setIsCreateOpen(true);
             loadProducts();
@@ -181,7 +175,7 @@ export function ProductionPage() {
             </form>
           </DialogContent>
         </Dialog>
-      </div>
+      </PageHeader>
 
       {/* Complete Dialog */}
       <Dialog open={isCompleteOpen} onOpenChange={setIsCompleteOpen}>
@@ -236,7 +230,7 @@ export function ProductionPage() {
             <SelectTrigger className="w-[180px]"><SelectValue placeholder="Estado" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos</SelectItem>
-              {Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+              {Object.entries(PRODUCTION_STATUS_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
             </SelectContent>
           </Select>
         </CardHeader>
@@ -245,52 +239,99 @@ export function ProductionPage() {
             <div className="flex justify-center py-10"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>
           ) : (
             <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Código</TableHead>
-                    <TableHead>Producto</TableHead>
-                    <TableHead>Lote</TableHead>
-                    <TableHead className="text-right">Cant. Inicial</TableHead>
-                    <TableHead className="text-right">Producida</TableHead>
-                    <TableHead className="text-right">Mermas</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead>Fecha</TableHead>
-                    <TableHead>Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {productions.map((p) => (
-                    <TableRow key={p._id}>
-                      <TableCell className="font-mono">{p.codigoProduccion}</TableCell>
-                      <TableCell>{getProductName(p.productoFinal)}</TableCell>
-                      <TableCell className="font-mono text-xs">{p.lote}</TableCell>
-                      <TableCell className="text-right">{p.cantidadInicial}</TableCell>
-                      <TableCell className="text-right">{p.cantidadProducida}</TableCell>
-                      <TableCell className="text-right">{p.totalMermas}</TableCell>
-                      <TableCell><Badge className={statusColors[p.estado]}>{statusLabels[p.estado]}</Badge></TableCell>
-                      <TableCell>{new Date(p.fechaInicio).toLocaleDateString('es-CL')}</TableCell>
-                      <TableCell>
+              {/* Vista cards en móvil */}
+              <div className="md:hidden space-y-3">
+                {productions.length === 0 ? (
+                  <p className="text-center py-12 text-sm text-muted-foreground/70">No se encontraron producciones</p>
+                ) : (
+                  productions.map((p) => (
+                    <Card key={p._id}>
+                      <CardContent className="pt-4">
+                        <div className="flex justify-between items-start gap-2">
+                          <p className="font-mono text-sm font-medium">{p.codigoProduccion}</p>
+                          <StatusBadge label={PRODUCTION_STATUS_LABELS[p.estado]} variant={PRODUCTION_STATUS_VARIANTS[p.estado]} />
+                        </div>
+                        <p className="font-medium mt-1">{getProductName(p.productoFinal)}</p>
+                        <p className="text-xs font-mono text-muted-foreground">Lote {p.lote}</p>
+                        <div className="grid grid-cols-3 gap-2 mt-2 text-sm">
+                          <div>
+                            <span className="text-muted-foreground block text-xs">Inicial</span>
+                            <span>{p.cantidadInicial}</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground block text-xs">Producida</span>
+                            <span>{p.cantidadProducida}</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground block text-xs">Mermas</span>
+                            <span>{p.totalMermas}</span>
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">{formatDateShort(p.fechaInicio)}</p>
                         {p.estado === 'en_proceso' && (
-                          <div className="flex gap-1">
-                            <Button variant="ghost" size="sm" onClick={() => { setSelectedId(p._id); setIsCompleteOpen(true); }}>
-                              <CheckCircle className="h-4 w-4 text-green-600" />
+                          <div className="flex gap-2 mt-3">
+                            <Button variant="outline" size="sm" className="flex-1" onClick={() => { setSelectedId(p._id); setIsCompleteOpen(true); }}>
+                              <CheckCircle className="h-4 w-4 mr-1" /> Completar
                             </Button>
-                            <Button variant="ghost" size="sm" onClick={() => { setSelectedId(p._id); setIsWasteOpen(true); }}>
+                            <Button variant="outline" size="sm" onClick={() => { setSelectedId(p._id); setIsWasteOpen(true); }}>
                               <AlertTriangle className="h-4 w-4 text-orange-600" />
                             </Button>
                           </div>
                         )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {productions.length === 0 && (
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+              {/* Tabla en desktop */}
+              <div className="hidden md:block overflow-x-auto rounded-2xl border">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center py-10 text-muted-foreground">No se encontraron producciones</TableCell>
+                      <TableHead>Código</TableHead>
+                      <TableHead>Producto</TableHead>
+                      <TableHead>Lote</TableHead>
+                      <TableHead className="text-right">Cant. Inicial</TableHead>
+                      <TableHead className="text-right">Producida</TableHead>
+                      <TableHead className="text-right">Mermas</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead>Acciones</TableHead>
                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {productions.map((p) => (
+                      <TableRow key={p._id}>
+                        <TableCell className="font-mono">{p.codigoProduccion}</TableCell>
+                        <TableCell>{getProductName(p.productoFinal)}</TableCell>
+                        <TableCell className="font-mono text-xs">{p.lote}</TableCell>
+                        <TableCell className="text-right">{p.cantidadInicial}</TableCell>
+                        <TableCell className="text-right">{p.cantidadProducida}</TableCell>
+                        <TableCell className="text-right">{p.totalMermas}</TableCell>
+                        <TableCell><StatusBadge label={PRODUCTION_STATUS_LABELS[p.estado]} variant={PRODUCTION_STATUS_VARIANTS[p.estado]} /></TableCell>
+                        <TableCell>{formatDateShort(p.fechaInicio)}</TableCell>
+                        <TableCell>
+                          {p.estado === 'en_proceso' && (
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="sm" onClick={() => { setSelectedId(p._id); setIsCompleteOpen(true); }}>
+                                <CheckCircle className="h-4 w-4 text-green-600" />
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => { setSelectedId(p._id); setIsWasteOpen(true); }}>
+                                <AlertTriangle className="h-4 w-4 text-orange-600" />
+                              </Button>
+                            </div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {productions.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={9} className="text-center py-12 text-sm text-muted-foreground/70">No se encontraron producciones</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
               <div className="flex justify-between items-center mt-4">
                 <p className="text-sm text-muted-foreground">Total: {total}</p>
                 <div className="flex gap-2">

@@ -9,8 +9,12 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { ArrowLeft, Plus, Trash2, AlertCircle, Loader2, ShoppingCart } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, AlertCircle, Loader2, ShoppingCart, Shield } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatCurrency } from '@/lib/format';
+import { REQUIRED_PATIENT_DOCUMENTS } from '@/lib/patient-documents';
+import { isDocumentSigned } from '@/lib/signatures';
+import { PageHeader } from '@/components/shared/PageHeader';
 
 interface SelectedItem {
   producto: Product;
@@ -34,9 +38,6 @@ export function PatientNewOrderPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
-
-  const formatCurrency = (n: number) =>
-    new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', minimumFractionDigits: 0 }).format(n);
 
   const fetchData = useCallback(async () => {
     try {
@@ -160,8 +161,17 @@ export function PatientNewOrderPage() {
     (p) => p.cantidadDisponible > 0 && !selectedItems.find((i) => i.producto._id === p._id)
   );
 
+  const docsCompleted = patient
+    ? REQUIRED_PATIENT_DOCUMENTS.filter((req) => {
+        const uploaded = patient.documentos?.find((d) => d.nombre === req.id);
+        return uploaded && isDocumentSigned(req.id);
+      }).length
+    : 0;
+  const docsRequired = REQUIRED_PATIENT_DOCUMENTS.length;
+  const allDocsComplete = docsCompleted === docsRequired;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       <div className="flex items-center gap-4">
         <Link to="/portal/pedidos">
           <Button variant="ghost" size="sm">
@@ -169,10 +179,26 @@ export function PatientNewOrderPage() {
             Volver
           </Button>
         </Link>
-        <h1 className="text-3xl font-bold">Nuevo Pedido</h1>
+        <PageHeader title="Nuevo Pedido" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {!allDocsComplete && (
+        <Alert variant="destructive">
+          <Shield className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between gap-4">
+            <span>
+              Debes completar tus documentos legales antes de realizar un pedido ({docsCompleted} de {docsRequired} completados).
+            </span>
+            <Link to="/portal/perfil">
+              <Button variant="outline" size="sm">
+                Ir a Mi Perfil
+              </Button>
+            </Link>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {allDocsComplete && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Product Selection + Form */}
         <div className="lg:col-span-2 space-y-6">
           {/* Product Selection */}
@@ -391,7 +417,7 @@ export function PatientNewOrderPage() {
             </CardContent>
           </Card>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

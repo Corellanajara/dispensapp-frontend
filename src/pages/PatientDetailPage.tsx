@@ -4,11 +4,13 @@ import { patientsAPI } from '@/services/api';
 import type { Patient } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, CheckCircle, XCircle, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { PATIENT_STATUS_LABELS, PATIENT_STATUS_VARIANTS, DOCUMENT_STATUS_LABELS, DOCUMENT_STATUS_VARIANTS } from '@/lib/constants';
+import { formatCurrency, formatDateShort } from '@/lib/format';
+import { StatusBadge } from '@/components/shared/StatusBadge';
 
 export function PatientDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -55,7 +57,7 @@ export function PatientDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 animate-fade-in">
       <div className="flex items-center gap-4">
         <Link to="/pacientes">
           <Button variant="ghost" size="sm">
@@ -66,17 +68,7 @@ export function PatientDetailPage() {
         <h1 className="text-3xl font-bold">
           {patient.nombre} {patient.apellido}
         </h1>
-        <Badge
-          className={
-            patient.estado === 'aprobado'
-              ? 'bg-green-100 text-green-800'
-              : patient.estado === 'pendiente'
-                ? 'bg-yellow-100 text-yellow-800'
-                : 'bg-red-100 text-red-800'
-          }
-        >
-          {patient.estado.charAt(0).toUpperCase() + patient.estado.slice(1)}
-        </Badge>
+        <StatusBadge label={PATIENT_STATUS_LABELS[patient.estado]} variant={PATIENT_STATUS_VARIANTS[patient.estado]} />
       </div>
 
       {hasRole('admin') && patient.estado === 'pendiente' && (
@@ -98,8 +90,8 @@ export function PatientDetailPage() {
           <TabsTrigger value="documentos">Documentos</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="info" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <TabsContent value="info" className="space-y-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">Datos Personales</CardTitle>
@@ -111,7 +103,7 @@ export function PatientDetailPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Fecha Nacimiento:</span>
-                  <span>{new Date(patient.fechaNacimiento).toLocaleDateString('es-CL')}</span>
+                  <span>{formatDateShort(patient.fechaNacimiento)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Teléfono:</span>
@@ -123,13 +115,7 @@ export function PatientDetailPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Límite Compra:</span>
-                  <span>
-                    {new Intl.NumberFormat('es-CL', {
-                      style: 'currency',
-                      currency: 'CLP',
-                      minimumFractionDigits: 0,
-                    }).format(patient.limiteCompra)}
-                  </span>
+                  <span>{formatCurrency(patient.limiteCompra)}</span>
                 </div>
               </CardContent>
             </Card>
@@ -191,7 +177,7 @@ export function PatientDetailPage() {
             </CardHeader>
             <CardContent>
               {patient.documentos.length === 0 ? (
-                <p className="text-center text-muted-foreground py-10">
+                <p className="text-center text-sm text-muted-foreground/70 py-12">
                   No hay documentos registrados
                 </p>
               ) : (
@@ -206,21 +192,11 @@ export function PatientDetailPage() {
                         <div>
                           <p className="font-medium text-sm">{doc.nombre}</p>
                           <p className="text-xs text-muted-foreground capitalize">
-                            {doc.tipo.replace(/_/g, ' ')} • {new Date(doc.fechaSubida).toLocaleDateString('es-CL')}
+                            {doc.tipo.replace(/_/g, ' ')} • {formatDateShort(doc.fechaSubida)}
                           </p>
                         </div>
                       </div>
-                      <Badge
-                        className={
-                          doc.estado === 'aprobado'
-                            ? 'bg-green-100 text-green-800'
-                            : doc.estado === 'pendiente'
-                              ? 'bg-yellow-100 text-yellow-800'
-                              : 'bg-red-100 text-red-800'
-                        }
-                      >
-                        {doc.estado}
-                      </Badge>
+                      <StatusBadge label={DOCUMENT_STATUS_LABELS[doc.estado] || doc.estado} variant={DOCUMENT_STATUS_VARIANTS[doc.estado] || ''} />
                     </div>
                   ))}
                 </div>
