@@ -14,7 +14,7 @@ import type {
 } from '@/types';
 
 const api = axios.create({
-  baseURL: 'https://dispensapp-backend-production-9a9a.up.railway.app/api',
+  baseURL: 'http://localhost:5001/api', //https://dispensapp-backend-production-9a9a.up.railway.app/api',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -94,7 +94,7 @@ export const ordersAPI = {
     api.patch<Order>(`/orders/${id}/status`, data),
 };
 
-// Payments (POS)
+// Payments (POS + Flow.cl)
 export const paymentsAPI = {
   providers: () => api.get<{ providers: string[] }>('/payments/providers'),
   initiate: (orderId: string, data: { method: 'debito' | 'credito'; installments?: number }) =>
@@ -103,6 +103,12 @@ export const paymentsAPI = {
     api.get(`/payments/orders/${orderId}/status`),
   cancel: (orderId: string) =>
     api.post(`/payments/orders/${orderId}/cancel`),
+  createFlow: (orderId: string, data?: { paymentMethod?: number }) =>
+    api.post<{ order: Order; redirectUrl: string; flowToken: string }>(`/payments/orders/${orderId}/create-flow`, data),
+  sendPaymentEmail: (orderId: string, data: { email?: string; subject?: string }) =>
+    api.post<{ order: Order; emailSent: boolean; email: string }>(`/payments/orders/${orderId}/send-payment-email`, data),
+  flowStatus: (orderId: string) =>
+    api.get(`/payments/orders/${orderId}/flow-status`),
 };
 
 // Signatures (Firma Electrónica)
@@ -201,6 +207,8 @@ export const patientPortalAPI = {
   getMyOrder: (id: string) => api.get<Order>(`/orders/patient/${id}`),
   createOrder: (data: Record<string, unknown>) => api.post<Order>('/orders/patient', data),
   cancelOrder: (id: string) => api.patch<Order>(`/orders/patient/${id}/cancel`),
+  payOrder: (orderId: string) =>
+    api.post<{ order: Order; redirectUrl: string; flowToken: string }>(`/payments/orders/${orderId}/patient-pay`),
 };
 
 export default api;

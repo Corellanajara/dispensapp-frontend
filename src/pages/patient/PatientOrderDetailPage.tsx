@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { patientPortalAPI } from '@/services/api';
 import type { Order, OrderStatus } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,7 +9,7 @@ import { Separator } from '@/components/ui/separator';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { ArrowLeft, XCircle, Clock, CheckCircle, Package, Truck, CreditCard, FileText, Download } from 'lucide-react';
+import { ArrowLeft, XCircle, Clock, CheckCircle, Package, Truck, CreditCard, FileText, Download, ExternalLink, Mail, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ORDER_STATUS_LABELS, ORDER_STATUS_VARIANTS, PAYMENT_STATUS_LABELS, PAYMENT_STATUS_VARIANTS, SIGNATURE_STATUS_LABELS, SIGNATURE_STATUS_VARIANTS } from '@/lib/constants';
 import { formatCurrency, formatDateShort, formatDateTime } from '@/lib/format';
@@ -35,6 +35,8 @@ export function PatientOrderDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isCancelOpen, setIsCancelOpen] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [isInitiatingPayment, setIsInitiatingPayment] = useState(false);
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -51,6 +53,21 @@ export function PatientOrderDetailPage() {
     fetchOrder();
   }, [id]);
 
+  useEffect(() => {
+    if (searchParams.get('payment') === 'complete' && order) {
+      toast.success('Pago procesado. El estado se actualizará en breve.');
+      setSearchParams({}, { replace: true });
+      const refetch = async () => {
+        if (!id) return;
+        try {
+          const { data } = await patientPortalAPI.getMyOrder(id);
+          setOrder(data);
+        } catch { /* silent */ }
+      };
+      refetch();
+    }
+  }, [searchParams, order, id, setSearchParams]);
+
   const handleCancel = async () => {
     if (!id) return;
     setIsCancelling(true);
@@ -64,6 +81,24 @@ export function PatientOrderDetailPage() {
       toast.error(axiosError.response?.data?.message || 'Error al cancelar pedido');
     } finally {
       setIsCancelling(false);
+    }
+  };
+
+  const handlePayNow = async () => {
+    if (!id) return;
+    setIsInitiatingPayment(true);
+    try {
+      const { data } = await patientPortalAPI.payOrder(id);
+      if (data.redirectUrl) {
+        window.location.href = data.redirectUrl;
+      } else {
+        toast.error('No se pudo obtener el link de pago');
+        setIsInitiatingPayment(false);
+      }
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { message?: string } } };
+      toast.error(axiosError.response?.data?.message || 'Error al iniciar pago');
+      setIsInitiatingPayment(false);
     }
   };
 
@@ -83,6 +118,8 @@ export function PatientOrderDetailPage() {
 
   const canCancel = order.estado === 'pendiente_revision';
   const lastAttempt = order.pago?.intentos?.length ? order.pago.intentos[order.pago.intentos.length - 1] : null;
+  const lastFlowAttempt = order.pago?.intentos?.filter(i => i.provider === 'flow').slice(-1)[0] || null;
+  const isPayableOrder = !['cancelado', 'entregado'].includes(order.estado) && order.pago?.estado !== 'aprobado';
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -239,8 +276,61 @@ export function PatientOrderDetailPage() {
                   <p className="text-red-600">{lastAttempt?.mensaje || 'El pago no fue procesado.'}</p>
                 )}
                 {order.pago.estado === 'pendiente' && (
-                  <p className="text-muted-foreground">El pago aún no ha sido procesado.</p>
+                  <div className="space-y-3">
+                    {lastFlowAttempt?.redirectUrl ? (
+                      <div className="space-y-3">
+                        <p className="text-muted-foreground">Tu pedido está pendiente de pago.</p>
+                        <a href={lastFlowAttempt.redirectUrl} rel="noopener noreferrer">
+                          <Button className="w-full" size="lg">
+                            <ExternalLink className="h-4 w-4 mr-2" />
+                            Pagar con Flow.cl ({formatCurrency(order.total)})
+                          </Button>
+                        </a>
+                      </div>
+                    ) : lastFlowAttempt ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3 p-4 border rounded-xl bg-blue-50">
+                          <Mail className="h-5 w-5 text-blue-600 shrink-0" />
+                          <div>
+                            <p className="text-sm font-medium text-blue-700">Link de pago enviado por email</p>
+                            <p className="text-xs text-blue-600 mt-0.5">Revisa tu bandeja de entrada o paga directamente aquí.</p>
+                          </div>
+                        </div>
+                        <Button className="w-full" size="lg" onClick={handlePayNow} disabled={isInitiatingPayment}>
+                          {isInitiatingPayment ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CreditCard className="h-4 w-4 mr-2" />}
+                          {isInitiatingPayment ? 'Preparando pago...' : `Pagar Ahora (${formatCurrency(order.total)})`}
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <p className="text-muted-foreground">El pago aún no ha sido procesado.</p>
+                        <Button className="w-full" size="lg" onClick={handlePayNow} disabled={isInitiatingPayment}>
+                          {isInitiatingPayment ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CreditCard className="h-4 w-4 mr-2" />}
+                          {isInitiatingPayment ? 'Preparando pago...' : `Pagar Ahora (${formatCurrency(order.total)})`}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 )}
+              </CardContent>
+            </Card>
+          )}
+
+          {!order.pago && isPayableOrder && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CreditCard className="h-5 w-5" />Pago
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Tu pedido está listo para ser pagado.
+                </p>
+                <Button className="w-full" size="lg" onClick={handlePayNow} disabled={isInitiatingPayment}>
+                  {isInitiatingPayment ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CreditCard className="h-4 w-4 mr-2" />}
+                  {isInitiatingPayment ? 'Preparando pago...' : `Pagar Ahora (${formatCurrency(order.total)})`}
+                </Button>
               </CardContent>
             </Card>
           )}

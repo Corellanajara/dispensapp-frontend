@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { ArrowLeft, CheckCircle, Package, Truck, XCircle, CreditCard, FileText, Upload, PenTool, Loader2, Ban } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Package, Truck, XCircle, CreditCard, FileText, Upload, PenTool, Loader2, Ban, Mail, Copy, RefreshCw, Send, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { ORDER_STATUS_LABELS, ORDER_STATUS_VARIANTS, PAYMENT_STATUS_LABELS, PAYMENT_STATUS_VARIANTS, SIGNATURE_STATUS_LABELS, SIGNATURE_STATUS_VARIANTS } from '@/lib/constants';
 import { formatCurrency, formatDateShort, formatDateTime } from '@/lib/format';
@@ -56,6 +56,16 @@ export function OrderDetailPage() {
   const [isPollingPayment, setIsPollingPayment] = useState(false);
   const [isCancellingPayment, setIsCancellingPayment] = useState(false);
   const paymentPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Flow payment state
+  const [showFlowEmailForm, setShowFlowEmailForm] = useState(false);
+  const [flowEmail, setFlowEmail] = useState('');
+  const [flowSubject, setFlowSubject] = useState('');
+  const [isSendingFlowEmail, setIsSendingFlowEmail] = useState(false);
+  const [isCreatingFlowPayment, setIsCreatingFlowPayment] = useState(false);
+  const [isCheckingFlowStatus, setIsCheckingFlowStatus] = useState(false);
+  const [flowRedirectUrl, setFlowRedirectUrl] = useState<string | null>(null);
+  const [flowCopied, setFlowCopied] = useState(false);
 
   // Document state
   const [showUploadForm, setShowUploadForm] = useState(false);
@@ -201,6 +211,65 @@ export function OrderDetailPage() {
     }
   };
 
+  const handleCreateFlowPayment = async () => {
+    if (!id) return;
+    setIsCreatingFlowPayment(true);
+    try {
+      const { data } = await paymentsAPI.createFlow(id);
+      setFlowRedirectUrl(data.redirectUrl);
+      await refreshOrder();
+      toast.success('Link de pago Flow.cl generado');
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { message?: string } } };
+      toast.error(axiosError.response?.data?.message || 'Error al crear pago Flow.cl');
+    } finally {
+      setIsCreatingFlowPayment(false);
+    }
+  };
+
+  const handleSendFlowEmail = async () => {
+    if (!id) return;
+    setIsSendingFlowEmail(true);
+    try {
+      await paymentsAPI.sendPaymentEmail(id, {
+        email: flowEmail || undefined,
+        subject: flowSubject || undefined,
+      });
+      setShowFlowEmailForm(false);
+      setFlowEmail('');
+      setFlowSubject('');
+      await refreshOrder();
+      toast.success('Link de pago enviado por email');
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { message?: string } } };
+      toast.error(axiosError.response?.data?.message || 'Error al enviar pago por email');
+    } finally {
+      setIsSendingFlowEmail(false);
+    }
+  };
+
+  const handleCheckFlowStatus = async () => {
+    if (!id) return;
+    setIsCheckingFlowStatus(true);
+    try {
+      await paymentsAPI.flowStatus(id);
+      await refreshOrder();
+      toast.success('Estado actualizado');
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { message?: string } } };
+      toast.error(axiosError.response?.data?.message || 'Error al consultar estado');
+    } finally {
+      setIsCheckingFlowStatus(false);
+    }
+  };
+
+  const handleCopyFlowUrl = (url: string) => {
+    navigator.clipboard.writeText(url);
+    setFlowCopied(true);
+    toast.success('Link copiado al portapapeles');
+    setTimeout(() => setFlowCopied(false), 2000);
+  };
+
   const handleUploadDocument = async () => {
     if (!id || !docFile) return;
     setIsUploadingDoc(true);
@@ -257,6 +326,9 @@ export function OrderDetailPage() {
   const pagoEstado = order.pago?.estado;
   const canInitiatePayment = !pagoEstado || pagoEstado === 'pendiente' || pagoEstado === 'rechazado' || pagoEstado === 'error';
   const lastAttempt = order.pago?.intentos?.length ? order.pago.intentos[order.pago.intentos.length - 1] : null;
+  const lastFlowAttempt = order.pago?.intentos?.filter(i => i.provider === 'flow').slice(-1)[0] || null;
+  const hasFlowPayment = !!lastFlowAttempt;
+  const canCreateFlowPayment = !pagoEstado || pagoEstado === 'pendiente' || pagoEstado === 'rechazado' || pagoEstado === 'error';
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -443,7 +515,7 @@ export function OrderDetailPage() {
                     <div key={intento._id ?? i} className="flex items-center justify-between text-xs p-2 border rounded">
                       <div className="flex items-center gap-2">
                         <StatusBadge label={PAYMENT_STATUS_LABELS[intento.estado]} variant={PAYMENT_STATUS_VARIANTS[intento.estado]} className="text-xs" />
-                        <span className="capitalize">{intento.metodo}</span>
+                        <span className="capitalize">{intento.metodo === 'flow' ? 'Flow.cl' : intento.metodo}</span>
                         {intento.ultimosDigitos && <span>•••• {intento.ultimosDigitos}</span>}
                       </div>
                       <span className="text-muted-foreground">{formatDateTime(intento.fecha)}</span>
@@ -453,6 +525,118 @@ export function OrderDetailPage() {
               </div>
             </>
           )}
+
+          <Separator className="my-4" />
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium flex items-center gap-2">
+                <ExternalLink className="h-4 w-4" />
+                Pago Electrónico (Flow.cl)
+              </p>
+              {hasFlowPayment && lastFlowAttempt && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCheckFlowStatus}
+                  disabled={isCheckingFlowStatus}
+                >
+                  {isCheckingFlowStatus ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+                  Consultar Estado
+                </Button>
+              )}
+            </div>
+
+            {lastFlowAttempt?.redirectUrl && lastFlowAttempt.estado === 'pendiente' && (
+              <div className="flex items-center gap-2 p-3 border rounded-lg bg-blue-50">
+                <div className="flex-1 text-xs font-mono truncate text-blue-700">{lastFlowAttempt.redirectUrl}</div>
+                <Button variant="outline" size="sm" onClick={() => handleCopyFlowUrl(lastFlowAttempt.redirectUrl!)}>
+                  <Copy className="h-3 w-3 mr-1" />{flowCopied ? 'Copiado' : 'Copiar'}
+                </Button>
+                <a href={lastFlowAttempt.redirectUrl} target="_blank" rel="noopener noreferrer">
+                  <Button variant="outline" size="sm">
+                    <ExternalLink className="h-3 w-3 mr-1" />Abrir
+                  </Button>
+                </a>
+              </div>
+            )}
+
+            {flowRedirectUrl && !lastFlowAttempt?.redirectUrl && (
+              <div className="flex items-center gap-2 p-3 border rounded-lg bg-green-50">
+                <div className="flex-1 text-xs font-mono truncate text-green-700">{flowRedirectUrl}</div>
+                <Button variant="outline" size="sm" onClick={() => handleCopyFlowUrl(flowRedirectUrl)}>
+                  <Copy className="h-3 w-3 mr-1" />{flowCopied ? 'Copiado' : 'Copiar'}
+                </Button>
+              </div>
+            )}
+
+            {lastFlowAttempt && lastFlowAttempt.estado !== 'pendiente' && (
+              <div className={`p-3 border rounded-lg text-sm ${
+                lastFlowAttempt.estado === 'aprobado' ? 'bg-green-50 text-green-700' :
+                lastFlowAttempt.estado === 'rechazado' ? 'bg-red-50 text-red-700' :
+                'bg-muted text-muted-foreground'
+              }`}>
+                {lastFlowAttempt.mensaje || `Estado: ${PAYMENT_STATUS_LABELS[lastFlowAttempt.estado]}`}
+              </div>
+            )}
+
+            {canCreateFlowPayment && !showFlowEmailForm && (
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handleCreateFlowPayment}
+                  disabled={isCreatingFlowPayment}
+                >
+                  {isCreatingFlowPayment ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CreditCard className="h-4 w-4 mr-2" />}
+                  Generar Link de Pago
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowFlowEmailForm(true);
+                    setFlowEmail((patient as any)?.email || '');
+                    setFlowSubject(`Pago Pedido #${order.numeroPedido} - Dispensario`);
+                  }}
+                >
+                  <Mail className="h-4 w-4 mr-2" />
+                  Enviar por Email
+                </Button>
+              </div>
+            )}
+
+            {showFlowEmailForm && (
+              <div className="space-y-3 p-4 border rounded-lg">
+                <div className="space-y-2">
+                  <Label>Email del Paciente</Label>
+                  <Input
+                    type="email"
+                    value={flowEmail}
+                    onChange={(e) => setFlowEmail(e.target.value)}
+                    placeholder="paciente@email.com"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Asunto</Label>
+                  <Input
+                    value={flowSubject}
+                    onChange={(e) => setFlowSubject(e.target.value)}
+                    placeholder="Pago Pedido #..."
+                  />
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  Monto: <span className="font-bold">{formatCurrency(order.total)}</span>
+                </div>
+                <div className="flex gap-2">
+                  <Button onClick={handleSendFlowEmail} disabled={!flowEmail || isSendingFlowEmail}>
+                    {isSendingFlowEmail ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+                    Enviar Link de Pago
+                  </Button>
+                  <Button variant="outline" onClick={() => { setShowFlowEmailForm(false); setFlowEmail(''); setFlowSubject(''); }}>
+                    Cancelar
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 

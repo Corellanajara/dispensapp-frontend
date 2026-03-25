@@ -123,13 +123,16 @@ export interface PaymentAttempt {
   transactionId: string;
   provider: string;
   monto: number;
-  metodo: 'debito' | 'credito';
+  metodo: 'debito' | 'credito' | 'flow';
   cuotas?: number;
   estado: PaymentStatus;
   ultimosDigitos?: string;
   codigoAutorizacion?: string;
   mensaje?: string;
   fecha: string;
+  flowToken?: string;
+  flowOrderNumber?: number;
+  redirectUrl?: string;
 }
 
 export interface OrderPayment {

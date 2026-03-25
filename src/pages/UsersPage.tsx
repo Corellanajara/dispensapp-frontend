@@ -126,7 +126,11 @@ export function UsersPage() {
                 <div className="space-y-2 col-span-2">
                   <Label>Rol</Label>
                   <select name="role" required className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
-                    {Object.entries(roleLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    {Object.entries(roleLabels)
+                      .filter(([k]) => k !== 'paciente')
+                      .map(([k, v]) => (
+                        <option key={k} value={k}>{v}</option>
+                      ))}
                   </select>
                 </div>
               </div>

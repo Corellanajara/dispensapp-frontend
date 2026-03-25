@@ -138,9 +138,9 @@ export function PatientNewOrderPage() {
         data.direccionEntrega = direccionEntrega;
       }
 
-      await patientPortalAPI.createOrder(data);
+      const { data: newOrder } = await patientPortalAPI.createOrder(data);
       toast.success('Pedido creado exitosamente');
-      navigate('/portal/pedidos');
+      navigate(`/portal/pedidos/${newOrder._id}`);
     } catch (err: unknown) {
       const axiosError = err as { response?: { data?: { message?: string } } };
       toast.error(axiosError.response?.data?.message || 'Error al crear pedido');

@@ -2,11 +2,12 @@ import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ShoppingCart, Package, Clock, CheckCircle, AlertCircle, ArrowRight } from 'lucide-react';
+import { ShoppingCart, Package, Clock, CheckCircle, AlertCircle, ArrowRight, CreditCard } from 'lucide-react';
 import { usePatientProfile, usePatientOrders } from '@/hooks/use-patient-portal';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { StatCard } from '@/components/shared/StatCard';
 import { StatusBadge } from '@/components/shared/StatusBadge';
+import { Badge } from '@/components/ui/badge';
 import { formatCurrency, formatDateShort } from '@/lib/format';
 import {
   ORDER_STATUS_LABELS,
@@ -26,6 +27,10 @@ export function PatientDashboardPage() {
   const entregados = orders.filter((o) => o.estado === 'entregado').length;
   const recentOrders = orders.slice(0, 5);
   const isApproved = patient?.estado === 'aprobado';
+  const ordersPendingPayment = orders.filter(
+    (o) => !['cancelado', 'entregado'].includes(o.estado) && o.pago?.estado !== 'aprobado'
+  );
+  const firstUnpaidOrder = ordersPendingPayment[0];
 
   if (isLoading) {
     return (
@@ -68,6 +73,34 @@ export function PatientDashboardPage() {
         </Alert>
       )}
 
+      {isApproved && firstUnpaidOrder && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+                <CreditCard className="h-5 w-5 text-amber-600" />
+              </div>
+              <div>
+                <p className="font-medium text-sm text-amber-900">
+                  {ordersPendingPayment.length === 1
+                    ? 'Tienes 1 pedido pendiente de pago'
+                    : `Tienes ${ordersPendingPayment.length} pedidos pendientes de pago`}
+                </p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  Pedido {firstUnpaidOrder.numeroPedido} — {formatCurrency(firstUnpaidOrder.total)}
+                </p>
+              </div>
+            </div>
+            <Link to={`/portal/pedidos/${firstUnpaidOrder._id}`}>
+              <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white">
+                <CreditCard className="h-4 w-4 mr-1" />
+                Pagar Ahora
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         <div className="animate-fade-in" style={{ animationDelay: '0ms' }}>
           <StatCard title="Pendientes" value={pendientes} subtitle="pedidos en espera" icon={Clock} tint="blue" />
@@ -104,8 +137,13 @@ export function PatientDashboardPage() {
                         <p className="text-xs text-muted-foreground">{formatDateShort(order.createdAt)}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                       <span className="text-sm font-medium">{formatCurrency(order.total)}</span>
+                      {order.pago?.estado === 'aprobado' ? (
+                        <Badge className="bg-green-100 text-green-700 border-green-200 rounded-full text-xs">Pagado</Badge>
+                      ) : !['cancelado', 'entregado'].includes(order.estado) ? (
+                        <Badge className="bg-amber-100 text-amber-700 border-amber-200 rounded-full text-xs">Por Pagar</Badge>
+                      ) : null}
                       <StatusBadge
                         label={ORDER_STATUS_LABELS[order.estado]}
                         variant={ORDER_STATUS_VARIANTS[order.estado]}

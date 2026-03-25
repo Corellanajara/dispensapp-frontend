@@ -4,10 +4,11 @@ import { patientPortalAPI } from '@/services/api';
 import type { Order } from '@/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Plus, ShoppingCart, Eye, Package } from 'lucide-react';
+import { Plus, ShoppingCart, Eye, Package, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
 import { ORDER_STATUS_LABELS, ORDER_STATUS_VARIANTS } from '@/lib/constants';
 import { formatCurrency, formatDateShort } from '@/lib/format';
@@ -115,12 +116,22 @@ export function PatientOrdersPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4 sm:ml-auto">
+                    <div className="flex items-center gap-3 sm:ml-auto">
                       <span className="text-lg font-bold">{formatCurrency(order.total)}</span>
+                      {order.pago?.estado === 'aprobado' ? (
+                        <Badge className="bg-green-100 text-green-700 border-green-200 rounded-full text-xs">Pagado</Badge>
+                      ) : !['cancelado', 'entregado'].includes(order.estado) ? (
+                        <Link to={`/portal/pedidos/${order._id}`}>
+                          <Button size="sm" className="rounded-xl">
+                            <CreditCard className="h-4 w-4 mr-1" />
+                            Pagar
+                          </Button>
+                        </Link>
+                      ) : null}
                       <Link to={`/portal/pedidos/${order._id}`}>
                         <Button variant="outline" size="sm" className="rounded-xl">
                           <Eye className="h-4 w-4 mr-2" />
-                          Ver Detalle
+                          Ver
                         </Button>
                       </Link>
                     </div>
