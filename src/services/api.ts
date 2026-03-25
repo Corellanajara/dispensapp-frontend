@@ -14,7 +14,7 @@ import type {
 } from '@/types';
 
 const api = axios.create({
-  baseURL: 'http://localhost:5001/api', //https://dispensapp-backend-production-9a9a.up.railway.app/api',
+  baseURL: 'https://dispensapp-backend-production-9a9a.up.railway.app/api',
   headers: {
     'Content-Type': 'application/json',
   },
