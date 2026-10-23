@@ -11,12 +11,23 @@ const breadcrumbMap: Record<string, string> = {
   '/': 'Dashboard',
   '/pacientes': 'Pacientes',
   '/productos': 'Productos',
-  '/pedidos': 'Pedidos',
+  '/pedidos': 'Dispensación',
+  '/cultivo': 'Cultivo',
+  '/qr': 'Escaneo QR',
   '/inventario': 'Inventario',
+  '/transferencias': 'Transferencias',
+  '/ubicaciones': 'Ubicaciones',
+  '/fiscalizacion': 'Fiscalización',
+  '/sucursales': 'Sucursales',
   '/produccion': 'Producción',
   '/finanzas': 'Finanzas',
   '/usuarios': 'Usuarios',
   '/auditoria': 'Auditoría',
+};
+
+// Segmentos finales con nombre propio (ej. /pacientes/:id/expediente).
+const segmentLabels: Record<string, string> = {
+  expediente: 'Expediente',
 };
 
 function ThemeToggle() {
@@ -46,15 +57,17 @@ function Breadcrumbs() {
   } else {
     crumbs.push({ label: 'Inicio', path: '/' });
     let currentPath = '';
-    for (const seg of segments) {
+    segments.forEach((seg, i) => {
       currentPath += `/${seg}`;
-      const label = breadcrumbMap[currentPath];
+      const label = breadcrumbMap[currentPath] ?? segmentLabels[seg];
       if (label) {
         crumbs.push({ label, path: currentPath });
-      } else {
+      } else if (i === segments.length - 1 || segmentLabels[segments[i + 1]]) {
+        // Solo el id que corresponde a la ficha se muestra como "Detalle"; los tramos intermedios
+        // sin nombre (ej. /cultivo/espacios) se omiten.
         crumbs.push({ label: 'Detalle', path: currentPath });
       }
-    }
+    });
   }
 
   return (

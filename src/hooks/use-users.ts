@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { usersAPI } from '@/services/api';
+import { usersAPI, apiErrorMessage } from '@/services/api';
 import type { User } from '@/types';
 import { toast } from 'sonner';
 
@@ -25,7 +25,7 @@ export function useUpdateUser() {
       qc.invalidateQueries({ queryKey: userKeys.lists() });
       toast.success('Usuario actualizado');
     },
-    onError: () => toast.error('Error al actualizar usuario'),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Error al actualizar usuario')),
   });
 }
 
@@ -37,6 +37,18 @@ export function useToggleUserActive() {
       qc.invalidateQueries({ queryKey: userKeys.lists() });
       toast.success('Estado de usuario actualizado');
     },
-    onError: () => toast.error('Error al cambiar estado del usuario'),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Error al cambiar estado del usuario')),
+  });
+}
+
+export function useUnlockUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => usersAPI.unlock(id).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: userKeys.lists() });
+      toast.success('Cuenta desbloqueada');
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Error al desbloquear la cuenta')),
   });
 }

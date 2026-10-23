@@ -8,10 +8,21 @@ export const reportKeys = {
   production: () => [...reportKeys.all, 'production'] as const,
 };
 
-export function useDashboard() {
+/** Solo admin y operador tienen acceso a /reports/dashboard. */
+export function useDashboard(enabled = true) {
   return useQuery({
     queryKey: reportKeys.dashboard(),
     queryFn: () => reportsAPI.dashboard().then((r) => r.data),
+    enabled,
+  });
+}
+
+/** `scope` (ej. id de la sucursal activa) solo separa la caché; no se envía a la API. */
+export function useDispensacionesReport(params: Record<string, string>, scope = '', enabled = true) {
+  return useQuery({
+    queryKey: [...reportKeys.all, 'dispensaciones', scope, params] as const,
+    queryFn: () => reportsAPI.dispensaciones(params).then((r) => r.data),
+    enabled,
   });
 }
 

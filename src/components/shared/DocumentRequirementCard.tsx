@@ -1,139 +1,311 @@
-import type { RequiredDocument } from '@/lib/patient-documents';
-import type { PatientDocument } from '@/types';
-import type { SignatureData } from '@/lib/signatures';
+import { useState } from 'react';
+import type { DocumentRequirement, PatientDocument } from '@/types';
+import { patientPortalAPI, openDocument, apiErrorMessage } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Upload,
   FileText,
   PenTool,
   CheckCircle2,
-  Clock,
   AlertCircle,
+  Eye,
+  RefreshCw,
+  ExternalLink,
+  Loader2,
+  XCircle,
 } from 'lucide-react';
-import { formatDate } from '@/lib/format';
+import { toast } from 'sonner';
+import { formatDate, formatDateOnly, daysUntil } from '@/lib/format';
 
 interface DocumentRequirementCardProps {
-  requirement: RequiredDocument;
-  uploadedDoc?: PatientDocument;
-  signatureData?: SignatureData | null;
-  onUpload: () => void;
-  onSign: () => void;
-  isUploading?: boolean;
+  requirement: DocumentRequirement;
+  /** Documento más reciente del tipo requerido, si existe. */
+  doc?: PatientDocument;
+  /** Se llama después de subir, firmar o actualizar, para recargar el perfil. */
+  onChanged: () => void;
 }
 
-export function DocumentRequirementCard({
-  requirement,
-  uploadedDoc,
-  signatureData,
-  onUpload,
-  onSign,
-  isUploading,
-}: DocumentRequirementCardProps) {
-  const isUploaded = !!uploadedDoc;
-  const isSigned = !!signatureData;
-  const isComplete = isUploaded && isSigned;
+type Estado = 'falta' | 'en_revision' | 'rechazado' | 'por_firmar' | 'firma_en_curso' | 'vencido' | 'completo';
+
+function estadoDe(req: DocumentRequirement, doc?: PatientDocument): Estado {
+  if (!doc) return 'falta';
+  if (doc.estado === 'rechazado') return 'rechazado';
+  if (req.requiereVencimiento) {
+    const dias = daysUntil(doc.fechaVencimiento);
+    if (dias !== null && dias < 0) return 'vencido';
+  }
+  if (req.requiereFirma && doc.firma?.estado !== 'firmado') {
+    return doc.firma?.estado === 'enviado' ? 'firma_en_curso' : 'por_firmar';
+  }
+  if (doc.estado === 'pendiente') return 'en_revision';
+  return 'completo';
+}
+
+const BADGES: Record<Estado, { label: string; className: string }> = {
+  falta: { label: 'Falta subir', className: 'border-muted-foreground/30 text-muted-foreground' },
+  en_revision: { label: 'En revisión', className: 'border-blue-500/30 text-blue-600 bg-blue-500/10' },
+  rechazado: { label: 'Rechazado', className: 'border-destructive/30 text-destructive bg-destructive/10' },
+  por_firmar: { label: 'Falta firmar', className: 'border-amber-500/30 text-amber-600 bg-amber-500/10' },
+  firma_en_curso: { label: 'Firma en curso', className: 'border-blue-500/30 text-blue-600 bg-blue-500/10' },
+  vencido: { label: 'Vencido', className: 'border-destructive/30 text-destructive bg-destructive/10' },
+  completo: { label: 'Aprobado', className: 'border-emerald-500/30 text-emerald-600 bg-emerald-500/10' },
+};
+
+export function DocumentRequirementCard({ requirement, doc, onChanged }: DocumentRequirementCardProps) {
+  const [showUpload, setShowUpload] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [fechaVencimiento, setFechaVencimiento] = useState('');
+  const [busy, setBusy] = useState<null | 'upload' | 'sign' | 'refresh' | 'view'>(null);
+
+  const estado = estadoDe(requirement, doc);
+  const badge = BADGES[estado];
+  const completo = estado === 'completo';
+  const firma = doc?.firma;
+  const puedeFirmar =
+    requirement.requiereFirma &&
+    !!doc &&
+    doc.estado !== 'rechazado' &&
+    (!firma || ['rechazado', 'expirado', 'error', 'pendiente'].includes(firma.estado));
+
+  const handleUpload = async () => {
+    if (!file) {
+      toast.error('Selecciona un archivo');
+      return;
+    }
+    if (requirement.requiereVencimiento && !fechaVencimiento) {
+      toast.error('Indica la fecha de vencimiento');
+      return;
+    }
+    setBusy('upload');
+    try {
+      const fd = new FormData();
+      fd.append('archivo', file);
+      fd.append('tipo', requirement.tipo);
+      fd.append('nombre', requirement.label);
+      if (fechaVencimiento) fd.append('fechaVencimiento', fechaVencimiento);
+      await patientPortalAPI.uploadDocument(fd);
+      toast.success(`${requirement.label} subido. El dispensario lo revisará.`);
+      setShowUpload(false);
+      setFile(null);
+      setFechaVencimiento('');
+      onChanged();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Error al subir el documento'));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleSign = async () => {
+    if (!doc) return;
+    setBusy('sign');
+    try {
+      const { data } = await patientPortalAPI.requestSignature(doc._id);
+      toast.success(data.firma?.message || 'Solicitud de firma enviada');
+      onChanged();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Error al solicitar la firma'));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleRefresh = async () => {
+    if (!doc) return;
+    setBusy('refresh');
+    try {
+      const { data } = await patientPortalAPI.signatureStatus(doc._id);
+      if (data.documento.firma?.estado === 'firmado') toast.success('Documento firmado');
+      else toast.info('La firma sigue en curso');
+      onChanged();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Error al consultar la firma'));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleView = async (firmado = false) => {
+    if (!doc) return;
+    setBusy('view');
+    try {
+      await openDocument(() => patientPortalAPI.documentUrl(doc._id, firmado));
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'No se pudo abrir el documento'));
+    } finally {
+      setBusy(null);
+    }
+  };
 
   return (
     <div
       className={`rounded-xl border p-4 transition-all ${
-        isComplete
+        completo
           ? 'border-emerald-500/30 bg-emerald-500/5'
-          : isUploaded
-            ? 'border-amber-500/30 bg-amber-500/5'
-            : 'border-muted-foreground/20 bg-muted/30'
+          : estado === 'rechazado' || estado === 'vencido'
+            ? 'border-destructive/30 bg-destructive/5'
+            : doc
+              ? 'border-amber-500/30 bg-amber-500/5'
+              : 'border-muted-foreground/20 bg-muted/30'
       }`}
     >
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div className="flex items-start gap-3 min-w-0">
           <div
             className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
-              isComplete
+              completo
                 ? 'bg-emerald-500/10 text-emerald-600'
-                : isUploaded
-                  ? 'bg-amber-500/10 text-amber-600'
-                  : 'bg-muted text-muted-foreground'
+                : estado === 'rechazado' || estado === 'vencido'
+                  ? 'bg-destructive/10 text-destructive'
+                  : doc
+                    ? 'bg-amber-500/10 text-amber-600'
+                    : 'bg-muted text-muted-foreground'
             }`}
           >
-            {isComplete ? (
+            {completo ? (
               <CheckCircle2 className="h-5 w-5" />
-            ) : isUploaded ? (
+            ) : estado === 'rechazado' || estado === 'vencido' ? (
+              <XCircle className="h-5 w-5" />
+            ) : doc ? (
               <FileText className="h-5 w-5" />
             ) : (
               <AlertCircle className="h-5 w-5" />
             )}
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 space-y-1">
             <h4 className="font-medium text-sm">{requirement.label}</h4>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {requirement.description}
-            </p>
-            {uploadedDoc && (
-              <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground">{requirement.descripcion}</p>
+            {doc && (
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <FileText className="h-3 w-3" />
-                <span>Subido el {formatDate(uploadedDoc.fechaSubida)}</span>
-              </div>
+                Subido el {formatDate(doc.fechaSubida)}
+                {doc.fechaVencimiento && <> · vence el {formatDateOnly(doc.fechaVencimiento)}</>}
+              </p>
             )}
-            {signatureData && (
-              <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+            {doc?.estado === 'rechazado' && (
+              <p className="text-xs text-destructive">
+                Rechazado{doc.observaciones ? `: ${doc.observaciones}` : ''}. Sube una nueva versión.
+              </p>
+            )}
+            {doc?.estado !== 'rechazado' && doc?.observaciones && (
+              <p className="text-xs text-muted-foreground italic">Nota del dispensario: {doc.observaciones}</p>
+            )}
+            {firma?.estado === 'firmado' && (
+              <p className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400">
                 <PenTool className="h-3 w-3" />
-                <span>
-                  Firmado por {signatureData.nombre} —{' '}
-                  {formatDate(signatureData.fecha)}
-                </span>
-              </div>
+                Firmado{firma.firmadoPor ? ` por ${firma.firmadoPor}` : ''}
+                {firma.fechaFirma ? ` el ${formatDate(firma.fechaFirma)}` : ''}
+              </p>
+            )}
+            {firma && ['rechazado', 'expirado', 'error'].includes(firma.estado) && (
+              <p className="text-xs text-destructive">La firma no se completó ({firma.estado}). Puedes intentarlo de nuevo.</p>
             )}
           </div>
         </div>
 
-        <div className="flex flex-col items-end gap-2 shrink-0">
-          {isComplete ? (
-            <Badge
-              variant="outline"
-              className="border-emerald-500/30 text-emerald-600 bg-emerald-500/10"
-            >
-              Firmado
-            </Badge>
-          ) : isUploaded ? (
-            <Badge
-              variant="outline"
-              className="border-amber-500/30 text-amber-600 bg-amber-500/10"
-            >
-              Por Firmar
-            </Badge>
-          ) : (
-            <Badge
-              variant="outline"
-              className="border-muted-foreground/30 text-muted-foreground"
-            >
-              Pendiente
-            </Badge>
-          )}
+        <div className="flex flex-wrap sm:flex-col sm:items-end gap-2 shrink-0">
+          <Badge variant="outline" className={badge.className}>
+            {badge.label}
+          </Badge>
 
-          {!isUploaded && (
+          <div className="flex flex-wrap gap-2 sm:justify-end">
+            {doc && (
+              <Button size="sm" variant="ghost" onClick={() => handleView()} disabled={busy === 'view'}>
+                <Eye className="mr-1.5 h-3.5 w-3.5" />
+                Ver
+              </Button>
+            )}
+            {firma?.estado === 'firmado' && firma.archivoFirmado && (
+              <Button size="sm" variant="ghost" onClick={() => handleView(true)} disabled={busy === 'view'}>
+                <Eye className="mr-1.5 h-3.5 w-3.5" />
+                Ver firmado
+              </Button>
+            )}
+            {puedeFirmar && (
+              <Button size="sm" onClick={handleSign} disabled={busy === 'sign'}>
+                {busy === 'sign' ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <PenTool className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                Firmar electrónicamente
+              </Button>
+            )}
+            {firma?.estado === 'enviado' && (
+              <>
+                {firma.signingUrl && (
+                  <a href={firma.signingUrl} target="_blank" rel="noopener noreferrer">
+                    <Button size="sm">
+                      <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                      Abrir firma
+                    </Button>
+                  </a>
+                )}
+                <Button size="sm" variant="outline" onClick={handleRefresh} disabled={busy === 'refresh'}>
+                  <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${busy === 'refresh' ? 'animate-spin' : ''}`} />
+                  Actualizar estado
+                </Button>
+              </>
+            )}
+            {!showUpload && (
+              <Button size="sm" variant="outline" onClick={() => setShowUpload(true)}>
+                <Upload className="mr-1.5 h-3.5 w-3.5" />
+                {doc ? 'Subir nueva versión' : 'Subir'}
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {showUpload && (
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-border/50 pt-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Archivo (PDF, JPG o PNG)</Label>
+            <Input
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              className="rounded-xl"
+            />
+          </div>
+          {requirement.requiereVencimiento && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">Fecha de vencimiento (obligatoria)</Label>
+              <Input
+                type="date"
+                value={fechaVencimiento}
+                onChange={(e) => setFechaVencimiento(e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
+          )}
+          <div className="flex gap-2 sm:col-span-2 justify-end">
+            <Button size="sm" variant="ghost" onClick={() => setShowUpload(false)} disabled={busy === 'upload'}>
+              Cancelar
+            </Button>
             <Button
               size="sm"
-              variant="outline"
-              onClick={onUpload}
-              disabled={isUploading}
+              onClick={handleUpload}
+              disabled={busy === 'upload' || !file || (requirement.requiereVencimiento && !fechaVencimiento)}
             >
-              {isUploading ? (
-                <Clock className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              {busy === 'upload' ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
               ) : (
                 <Upload className="mr-1.5 h-3.5 w-3.5" />
               )}
               Subir
             </Button>
-          )}
-
-          {isUploaded && !isSigned && (
-            <Button size="sm" onClick={onSign}>
-              <PenTool className="mr-1.5 h-3.5 w-3.5" />
-              Firmar
-            </Button>
+          </div>
+          {requirement.requiereFirma && (
+            <p className="text-xs text-muted-foreground sm:col-span-2">
+              Después de subirlo, usa "Firmar electrónicamente" para completar este documento.
+            </p>
           )}
         </div>
-      </div>
+      )}
     </div>
   );
 }

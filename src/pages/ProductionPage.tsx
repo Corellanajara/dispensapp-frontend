@@ -1,11 +1,17 @@
 import { useEffect, useState, useCallback } from 'react';
-import { productionAPI, productsAPI } from '@/services/api';
-import type { Production, Product } from '@/types';
+import { Link } from 'react-router-dom';
+import { productionAPI, productsAPI, apiErrorMessage } from '@/services/api';
+import type { Production, Product, Cosecha } from '@/types';
+import { useCosechas } from '@/hooks/use-cultivo';
+import { useUbicaciones } from '@/hooks/use-ubicaciones';
+import { NativeSelect } from '@/components/inventory/NativeSelect';
+import { populated, ubicacionLabel } from '@/components/inventory/helpers';
+import { UBICACION_TIPO_LABELS } from '@/lib/constants';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { PRODUCTION_STATUS_LABELS, PRODUCTION_STATUS_VARIANTS } from '@/lib/constants';
-import { formatDateShort } from '@/lib/format';
+import { formatDateShort, formatDateOnly } from '@/lib/format';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Label } from '@/components/ui/label';
@@ -32,6 +38,8 @@ export function ProductionPage() {
   const [isWasteOpen, setIsWasteOpen] = useState(false);
   const [selectedId, setSelectedId] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
+  const { data: cosechas = [] } = useCosechas({}, isCreateOpen);
+  const { data: ubicaciones = [] } = useUbicaciones({ activo: 'true' }, isCreateOpen);
   const [rawMaterials, setRawMaterials] = useState<{ nombre: string; cantidad: number; unidad: string }[]>([{ nombre: '', cantidad: 0, unidad: 'kg' }]);
 
   const fetchProductions = useCallback(async () => {
@@ -66,14 +74,15 @@ export function ProductionPage() {
         fechaInicio: form.get('fechaInicio'),
         materiasPrimas: rawMaterials.filter((m) => m.nombre),
         observaciones: form.get('observaciones'),
+        cosecha: form.get('cosecha') || undefined,
+        ubicacionDestino: form.get('ubicacionDestino') || undefined,
       });
       toast.success('Producción registrada');
       setIsCreateOpen(false);
       setRawMaterials([{ nombre: '', cantidad: 0, unidad: 'kg' }]);
       fetchProductions();
     } catch (err: unknown) {
-      const axiosError = err as { response?: { data?: { message?: string } } };
-      toast.error(axiosError.response?.data?.message || 'Error al crear producción');
+      toast.error(apiErrorMessage(err, 'Error al crear producción'));
     }
   };
 
@@ -147,6 +156,28 @@ export function ProductionPage() {
                 <div className="space-y-2">
                   <Label>Fecha Inicio</Label>
                   <Input name="fechaInicio" type="date" required />
+                </div>
+                <div className="space-y-2">
+                  <Label>Cosecha de origen (opcional)</Label>
+                  <NativeSelect name="cosecha" defaultValue="">
+                    <option value="">Sin cosecha asociada</option>
+                    {cosechas.map((c) => (
+                      <option key={c._id} value={c._id}>
+                        {c.lote} · {populated(c.espacio)?.flor ?? ''} ({formatDateOnly(c.fecha)})
+                      </option>
+                    ))}
+                  </NativeSelect>
+                  <p className="text-xs text-muted-foreground">Une el producto terminado con el paciente y espacio que lo cultivó.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Ubicación de destino</Label>
+                  <NativeSelect name="ubicacionDestino" defaultValue="">
+                    <option value="">Stock general del dispensario</option>
+                    {ubicaciones.map((u) => (
+                      <option key={u._id} value={u._id}>{u.nombre} · {u.codigo} ({UBICACION_TIPO_LABELS[u.tipo]})</option>
+                    ))}
+                  </NativeSelect>
+                  <p className="text-xs text-muted-foreground">Dónde queda el producto al completar la producción.</p>
                 </div>
               </div>
 
@@ -227,7 +258,7 @@ export function ProductionPage() {
       <Card>
         <CardHeader>
           <Select value={statusFilter} onValueChange={(v: string | null) => { setStatusFilter(v === 'all' || !v ? '' : v); setPage(1); }}>
-            <SelectTrigger className="w-[180px]"><SelectValue placeholder="Estado" /></SelectTrigger>
+            <SelectTrigger className="w-[180px]"><SelectValue placeholder="Estado">{(v: string) => (v && v !== 'all' ? PRODUCTION_STATUS_LABELS[v as keyof typeof PRODUCTION_STATUS_LABELS] ?? v : 'Todos')}</SelectValue></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos</SelectItem>
               {Object.entries(PRODUCTION_STATUS_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
@@ -253,6 +284,7 @@ export function ProductionPage() {
                         </div>
                         <p className="font-medium mt-1">{getProductName(p.productoFinal)}</p>
                         <p className="text-xs font-mono text-muted-foreground">Lote {p.lote}</p>
+                        <OrigenDestino p={p} />
                         <div className="grid grid-cols-3 gap-2 mt-2 text-sm">
                           <div>
                             <span className="text-muted-foreground block text-xs">Inicial</span>
@@ -291,6 +323,7 @@ export function ProductionPage() {
                       <TableHead>Código</TableHead>
                       <TableHead>Producto</TableHead>
                       <TableHead>Lote</TableHead>
+                      <TableHead>Cosecha / destino</TableHead>
                       <TableHead className="text-right">Cant. Inicial</TableHead>
                       <TableHead className="text-right">Producida</TableHead>
                       <TableHead className="text-right">Mermas</TableHead>
@@ -305,6 +338,7 @@ export function ProductionPage() {
                         <TableCell className="font-mono">{p.codigoProduccion}</TableCell>
                         <TableCell>{getProductName(p.productoFinal)}</TableCell>
                         <TableCell className="font-mono text-xs">{p.lote}</TableCell>
+                        <TableCell><OrigenDestino p={p} /></TableCell>
                         <TableCell className="text-right">{p.cantidadInicial}</TableCell>
                         <TableCell className="text-right">{p.cantidadProducida}</TableCell>
                         <TableCell className="text-right">{p.totalMermas}</TableCell>
@@ -326,7 +360,7 @@ export function ProductionPage() {
                     ))}
                     {productions.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={9} className="text-center py-12 text-sm text-muted-foreground/70">No se encontraron producciones</TableCell>
+                        <TableCell colSpan={10} className="text-center py-12 text-sm text-muted-foreground/70">No se encontraron producciones</TableCell>
                       </TableRow>
                     )}
                   </TableBody>
@@ -343,6 +377,23 @@ export function ProductionPage() {
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+/** Cosecha de origen (enlace a su trazabilidad) y ubicación donde queda el producto. */
+function OrigenDestino({ p }: { p: Production }) {
+  const cosecha = populated<Pick<Cosecha, '_id' | 'lote' | 'fecha'>>(p.cosecha);
+  return (
+    <div className="text-xs text-muted-foreground">
+      {cosecha ? (
+        <Link to={`/inventario?lote=${encodeURIComponent(cosecha.lote)}`} className="font-mono text-primary hover:underline">
+          {cosecha.lote}
+        </Link>
+      ) : (
+        <span>Sin cosecha</span>
+      )}
+      <span className="block">→ {ubicacionLabel(p.ubicacionDestino)}</span>
     </div>
   );
 }

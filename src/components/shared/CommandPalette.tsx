@@ -14,13 +14,18 @@ import {
   LayoutDashboard,
   Users,
   Package,
-  ShoppingCart,
   Warehouse,
   Factory,
   DollarSign,
   Settings,
   Shield,
   User,
+  Sprout,
+  MapPin,
+  ArrowLeftRight,
+  FileSearch,
+  ClipboardList,
+  Building2,
 } from 'lucide-react';
 import type { UserRole } from '@/types';
 import type { LucideIcon } from 'lucide-react';
@@ -35,19 +40,24 @@ interface CommandRoute {
 }
 
 const routes: CommandRoute[] = [
-  { title: 'Dashboard', url: '/', icon: LayoutDashboard, roles: ['admin', 'operador', 'produccion', 'finanzas'], group: 'Navegación', shortcut: 'D' },
+  { title: 'Dashboard', url: '/', icon: LayoutDashboard, roles: ['admin', 'operador', 'produccion', 'cultivo', 'finanzas'], group: 'Navegación', shortcut: 'D' },
   { title: 'Pacientes', url: '/pacientes', icon: Users, roles: ['admin', 'operador'], group: 'Navegación', shortcut: 'P' },
-  { title: 'Pedidos', url: '/pedidos', icon: ShoppingCart, roles: ['admin', 'operador'], group: 'Navegación', shortcut: 'O' },
+  { title: 'Dispensación', url: '/pedidos', icon: ClipboardList, roles: ['admin', 'operador'], group: 'Navegación', shortcut: 'O' },
+  { title: 'Cultivo', url: '/cultivo', icon: Sprout, roles: ['admin', 'operador', 'cultivo'], group: 'Navegación' },
+  { title: 'Inventario', url: '/inventario', icon: Warehouse, roles: ['admin', 'operador', 'cultivo', 'produccion'], group: 'Navegación' },
+  { title: 'Transferencias', url: '/transferencias', icon: ArrowLeftRight, roles: ['admin', 'operador', 'cultivo', 'produccion'], group: 'Navegación' },
+  { title: 'Ubicaciones', url: '/ubicaciones', icon: MapPin, roles: ['admin', 'operador', 'cultivo', 'produccion'], group: 'Navegación' },
   { title: 'Productos', url: '/productos', icon: Package, roles: ['admin', 'operador', 'produccion'], group: 'Navegación' },
-  { title: 'Inventario', url: '/inventario', icon: Warehouse, roles: ['admin', 'operador'], group: 'Navegación' },
   { title: 'Producción', url: '/produccion', icon: Factory, roles: ['admin', 'operador', 'produccion'], group: 'Navegación' },
+  { title: 'Fiscalización', url: '/fiscalizacion', icon: FileSearch, roles: ['admin', 'operador'], group: 'Administración' },
   { title: 'Finanzas', url: '/finanzas', icon: DollarSign, roles: ['admin', 'finanzas'], group: 'Administración' },
   { title: 'Usuarios', url: '/usuarios', icon: Settings, roles: ['admin'], group: 'Administración' },
+  { title: 'Sucursales', url: '/sucursales', icon: Building2, roles: ['admin'], group: 'Administración' },
   { title: 'Auditoría', url: '/auditoria', icon: Shield, roles: ['admin'], group: 'Administración' },
   // Patient routes
   { title: 'Mi Panel', url: '/portal', icon: LayoutDashboard, roles: ['paciente'], group: 'Portal' },
-  { title: 'Catálogo', url: '/portal/catalogo', icon: Package, roles: ['paciente'], group: 'Portal' },
-  { title: 'Mis Pedidos', url: '/portal/pedidos', icon: ShoppingCart, roles: ['paciente'], group: 'Portal' },
+  { title: 'Productos disponibles', url: '/portal/catalogo', icon: Package, roles: ['paciente'], group: 'Portal' },
+  { title: 'Mis solicitudes', url: '/portal/pedidos', icon: ClipboardList, roles: ['paciente'], group: 'Portal' },
   { title: 'Mi Perfil', url: '/portal/perfil', icon: User, roles: ['paciente'], group: 'Portal' },
 ];
 

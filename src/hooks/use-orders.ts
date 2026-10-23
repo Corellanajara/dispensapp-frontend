@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ordersAPI } from '@/services/api';
+import { ordersAPI, apiErrorMessage } from '@/services/api';
 import { toast } from 'sonner';
 
 export const orderKeys = {
@@ -31,9 +31,9 @@ export function useCreateOrder() {
     mutationFn: (data: Record<string, unknown>) => ordersAPI.create(data).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: orderKeys.lists() });
-      toast.success('Pedido creado correctamente');
+      toast.success('Nota de dispensación creada');
     },
-    onError: () => toast.error('Error al crear pedido'),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Error al crear la nota')),
   });
 }
 
@@ -45,8 +45,8 @@ export function useUpdateOrderStatus() {
     onSuccess: (_, { id }) => {
       qc.invalidateQueries({ queryKey: orderKeys.detail(id) });
       qc.invalidateQueries({ queryKey: orderKeys.lists() });
-      toast.success('Estado del pedido actualizado');
+      toast.success('Estado de la nota actualizado');
     },
-    onError: () => toast.error('Error al actualizar estado'),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Error al actualizar estado')),
   });
 }

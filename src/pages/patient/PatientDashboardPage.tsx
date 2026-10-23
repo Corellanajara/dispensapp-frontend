@@ -1,14 +1,15 @@
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ShoppingCart, Package, Clock, CheckCircle, AlertCircle, ArrowRight, CreditCard } from 'lucide-react';
+import { ClipboardList, Package, Clock, CheckCircle, ArrowRight, CalendarClock, Building2 } from 'lucide-react';
 import { usePatientProfile, usePatientOrders } from '@/hooks/use-patient-portal';
+import { useAppConfig } from '@/hooks/use-app-config';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { StatCard } from '@/components/shared/StatCard';
 import { StatusBadge } from '@/components/shared/StatusBadge';
-import { Badge } from '@/components/ui/badge';
-import { formatCurrency, formatDateShort } from '@/lib/format';
+import { PatientStatusBanner } from '@/components/portal/PatientStatusBanner';
+import { motivoBloqueoSolicitud, estadoReceta, sucursalDe } from '@/components/portal/portal-helpers';
+import { formatDateShort, formatDateOnly } from '@/lib/format';
 import {
   ORDER_STATUS_LABELS,
   ORDER_STATUS_VARIANTS,
@@ -17,20 +18,19 @@ import {
 } from '@/lib/constants';
 
 export function PatientDashboardPage() {
+  const config = useAppConfig();
   const { data: patient, isLoading: loadingProfile } = usePatientProfile();
   const { data: ordersData, isLoading: loadingOrders } = usePatientOrders({ limit: '100' });
   const isLoading = loadingProfile || loadingOrders;
 
   const orders = ordersData?.data ?? [];
   const pendientes = orders.filter((o) => o.estado === 'pendiente_revision' || o.estado === 'aprobado').length;
-  const enProceso = orders.filter((o) => o.estado === 'en_preparacion' || o.estado === 'listo_retiro' || o.estado === 'en_despacho').length;
+  const enProceso = orders.filter((o) => ['en_preparacion', 'listo_retiro', 'en_despacho'].includes(o.estado)).length;
   const entregados = orders.filter((o) => o.estado === 'entregado').length;
   const recentOrders = orders.slice(0, 5);
-  const isApproved = patient?.estado === 'aprobado';
-  const ordersPendingPayment = orders.filter(
-    (o) => !['cancelado', 'entregado'].includes(o.estado) && o.pago?.estado !== 'aprobado'
-  );
-  const firstUnpaidOrder = ordersPendingPayment[0];
+  const bloqueo = motivoBloqueoSolicitud(patient);
+  const receta = estadoReceta(patient, config.diasAvisoReceta);
+  const sucursal = sucursalDe(patient);
 
   if (isLoading) {
     return (
@@ -52,103 +52,92 @@ export function PatientDashboardPage() {
   return (
     <div className="space-y-8 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <PageHeader
-          title={`Hola, ${patient?.nombre ?? ''}`}
-          description="Tu panel de paciente"
-        />
+        <PageHeader title={`Hola, ${patient?.nombre ?? ''}`} description="Tu panel de paciente" />
         {patient && (
-          <StatusBadge
-            label={PATIENT_STATUS_LABELS[patient.estado]}
-            variant={PATIENT_STATUS_VARIANTS[patient.estado]}
-          />
+          <StatusBadge label={PATIENT_STATUS_LABELS[patient.estado]} variant={PATIENT_STATUS_VARIANTS[patient.estado]} />
         )}
       </div>
 
-      {!isApproved && (
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            Tu cuenta está en revisión. Una vez aprobada podrás realizar pedidos.
-          </AlertDescription>
-        </Alert>
-      )}
+      {patient && <PatientStatusBanner patient={patient} diasAviso={config.diasAvisoReceta} />}
 
-      {isApproved && firstUnpaidOrder && (
-        <Card className="border-amber-200 bg-amber-50">
-          <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
-                <CreditCard className="h-5 w-5 text-amber-600" />
+      {patient && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <Card>
+            <CardContent className="p-5 flex items-center gap-4">
+              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <CalendarClock className="h-5 w-5 text-primary" />
               </div>
-              <div>
-                <p className="font-medium text-sm text-amber-900">
-                  {ordersPendingPayment.length === 1
-                    ? 'Tienes 1 pedido pendiente de pago'
-                    : `Tienes ${ordersPendingPayment.length} pedidos pendientes de pago`}
+              <div className="text-sm">
+                <p className="text-xs text-muted-foreground">Receta vigente</p>
+                <p className="font-medium">
+                  {receta.tipo === 'sin_receta' ? 'Sin receta vigente' : `Hasta el ${formatDateOnly(receta.fecha)}`}
                 </p>
-                <p className="text-xs text-amber-700 mt-0.5">
-                  Pedido {firstUnpaidOrder.numeroPedido} — {formatCurrency(firstUnpaidOrder.total)}
+                <p className="text-xs text-muted-foreground">
+                  Límite:{' '}
+                  {patient.limiteMensualUnidades > 0
+                    ? `${patient.limiteMensualUnidades} unidades cada 30 días`
+                    : 'sin límite'}
                 </p>
               </div>
-            </div>
-            <Link to={`/portal/pedidos/${firstUnpaidOrder._id}`}>
-              <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white">
-                <CreditCard className="h-4 w-4 mr-1" />
-                Pagar Ahora
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-5 flex items-center gap-4">
+              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <Building2 className="h-5 w-5 text-primary" />
+              </div>
+              <div className="text-sm">
+                <p className="text-xs text-muted-foreground">Mi dispensario</p>
+                <p className="font-medium">{sucursal?.nombre ?? 'Sin asignar'}</p>
+                {sucursal?.horarioAtencion && (
+                  <p className="text-xs text-muted-foreground">{sucursal.horarioAtencion}</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         <div className="animate-fade-in" style={{ animationDelay: '0ms' }}>
-          <StatCard title="Pendientes" value={pendientes} subtitle="pedidos en espera" icon={Clock} tint="blue" />
+          <StatCard title="Pendientes" value={pendientes} subtitle="solicitudes en revisión" icon={Clock} tint="blue" />
         </div>
         <div className="animate-fade-in" style={{ animationDelay: '80ms' }}>
-          <StatCard title="En Proceso" value={enProceso} subtitle="pedidos en preparación" icon={Package} tint="amber" />
+          <StatCard title="En proceso" value={enProceso} subtitle="en preparación o listas" icon={Package} tint="amber" />
         </div>
         <div className="animate-fade-in" style={{ animationDelay: '160ms' }}>
-          <StatCard title="Entregados" value={entregados} subtitle="pedidos completados" icon={CheckCircle} tint="green" />
+          <StatCard title="Entregadas" value={entregados} subtitle="dispensaciones recibidas" icon={CheckCircle} tint="green" />
         </div>
       </div>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">Pedidos Recientes</CardTitle>
+          <CardTitle className="text-base">Solicitudes de dispensación recientes</CardTitle>
           <Link to="/portal/pedidos">
             <Button variant="ghost" size="sm">
-              Ver todos <ArrowRight className="h-4 w-4 ml-1" />
+              Ver todas <ArrowRight className="h-4 w-4 ml-1" />
             </Button>
           </Link>
         </CardHeader>
         <CardContent>
           {recentOrders.length === 0 ? (
-            <p className="text-center py-8 text-muted-foreground">No tienes pedidos aún</p>
+            <p className="text-center py-8 text-muted-foreground">Aún no tienes solicitudes</p>
           ) : (
             <div className="space-y-2.5">
               {recentOrders.map((order) => (
                 <Link key={order._id} to={`/portal/pedidos/${order._id}`} className="block">
-                  <div className="flex items-center justify-between p-3.5 border border-border/60 rounded-xl hover:bg-accent/40 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-                      <div>
+                  <div className="flex items-center justify-between gap-3 p-3.5 border border-border/60 rounded-xl hover:bg-accent/40 transition-colors">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <ClipboardList className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <div className="min-w-0">
                         <p className="font-medium font-mono text-sm">{order.numeroPedido}</p>
-                        <p className="text-xs text-muted-foreground">{formatDateShort(order.createdAt)}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatDateShort(order.createdAt)} ·{' '}
+                          {order.items.reduce((s, i) => s + i.cantidad, 0)} unidad(es)
+                        </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{formatCurrency(order.total)}</span>
-                      {order.pago?.estado === 'aprobado' ? (
-                        <Badge className="bg-green-100 text-green-700 border-green-200 rounded-full text-xs">Pagado</Badge>
-                      ) : !['cancelado', 'entregado'].includes(order.estado) ? (
-                        <Badge className="bg-amber-100 text-amber-700 border-amber-200 rounded-full text-xs">Por Pagar</Badge>
-                      ) : null}
-                      <StatusBadge
-                        label={ORDER_STATUS_LABELS[order.estado]}
-                        variant={ORDER_STATUS_VARIANTS[order.estado]}
-                      />
-                    </div>
+                    <StatusBadge label={ORDER_STATUS_LABELS[order.estado]} variant={ORDER_STATUS_VARIANTS[order.estado]} />
                   </div>
                 </Link>
               ))}
@@ -165,36 +154,36 @@ export function PatientDashboardPage() {
                 <Package className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <h3 className="font-semibold text-sm">Ver Catálogo</h3>
-                <p className="text-xs text-muted-foreground">Explora los productos disponibles</p>
+                <h3 className="font-semibold text-sm">Productos disponibles</h3>
+                <p className="text-xs text-muted-foreground">Lo que hay en tu dispensario</p>
               </div>
             </CardContent>
           </Card>
         </Link>
 
-        {isApproved ? (
+        {!bloqueo ? (
           <Link to="/portal/pedidos/nuevo">
             <Card className="hover:bg-accent/40 transition-colors cursor-pointer h-full">
               <CardContent className="p-6 flex items-center gap-4">
                 <div className="h-11 w-11 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <ShoppingCart className="h-5 w-5 text-primary" />
+                  <ClipboardList className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-sm">Nuevo Pedido</h3>
-                  <p className="text-xs text-muted-foreground">Realiza un nuevo pedido de productos</p>
+                  <h3 className="font-semibold text-sm">Nueva solicitud</h3>
+                  <p className="text-xs text-muted-foreground">Solicita una dispensación</p>
                 </div>
               </CardContent>
             </Card>
           </Link>
         ) : (
-          <Card className="opacity-50 h-full">
+          <Card className="opacity-60 h-full">
             <CardContent className="p-6 flex items-center gap-4">
-              <div className="h-11 w-11 rounded-xl bg-muted flex items-center justify-center">
-                <ShoppingCart className="h-5 w-5 text-muted-foreground" />
+              <div className="h-11 w-11 rounded-xl bg-muted flex items-center justify-center shrink-0">
+                <ClipboardList className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
-                <h3 className="font-semibold text-sm">Nuevo Pedido</h3>
-                <p className="text-xs text-muted-foreground">Disponible cuando tu cuenta sea aprobada</p>
+                <h3 className="font-semibold text-sm">Nueva solicitud</h3>
+                <p className="text-xs text-muted-foreground">{bloqueo}</p>
               </div>
             </CardContent>
           </Card>

@@ -1,26 +1,41 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { inventoryAPI } from '@/services/api';
+import { inventoryAPI, apiErrorMessage } from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
 export const inventoryKeys = {
   all: ['inventory'] as const,
   movements: () => [...inventoryKeys.all, 'movements'] as const,
-  movementList: (params: Record<string, string>) => [...inventoryKeys.movements(), params] as const,
-  stock: () => [...inventoryKeys.all, 'stock'] as const,
+  movementList: (sucursal: string, params: Record<string, string>) =>
+    [...inventoryKeys.movements(), sucursal, params] as const,
+  stock: (sucursal: string, params: Record<string, string>) => [...inventoryKeys.all, 'stock', sucursal, params] as const,
+  porUbicacion: (sucursal: string) => [...inventoryKeys.all, 'por-ubicacion', sucursal] as const,
   traceability: (lote: string) => [...inventoryKeys.all, 'traceability', lote] as const,
 };
 
 export function useInventoryMovements(params: Record<string, string> = {}) {
+  const { sucursalActiva } = useAuth();
   return useQuery({
-    queryKey: inventoryKeys.movementList(params),
+    queryKey: inventoryKeys.movementList(sucursalActiva?._id ?? 'todas', params),
     queryFn: () => inventoryAPI.movements(params).then((r) => r.data),
   });
 }
 
-export function useStock() {
+/** Stock por lote y ubicación. Filtros: ubicacion (id o "ninguna"), producto, conStock. */
+export function useStock(params: Record<string, string> = {}, enabled = true) {
+  const { sucursalActiva } = useAuth();
   return useQuery({
-    queryKey: inventoryKeys.stock(),
-    queryFn: () => inventoryAPI.stock().then((r) => r.data),
+    queryKey: inventoryKeys.stock(sucursalActiva?._id ?? 'todas', params),
+    queryFn: () => inventoryAPI.stock(params).then((r) => r.data),
+    enabled,
+  });
+}
+
+export function useStockPorUbicacion() {
+  const { sucursalActiva } = useAuth();
+  return useQuery({
+    queryKey: inventoryKeys.porUbicacion(sucursalActiva?._id ?? 'todas'),
+    queryFn: () => inventoryAPI.stockPorUbicacion().then((r) => r.data),
   });
 }
 
@@ -29,6 +44,7 @@ export function useTraceability(lote: string) {
     queryKey: inventoryKeys.traceability(lote),
     queryFn: () => inventoryAPI.traceability(lote).then((r) => r.data),
     enabled: !!lote,
+    retry: false,
   });
 }
 
@@ -40,6 +56,6 @@ export function useCreateMovement() {
       qc.invalidateQueries({ queryKey: inventoryKeys.all });
       toast.success('Movimiento registrado');
     },
-    onError: () => toast.error('Error al registrar movimiento'),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Error al registrar movimiento')),
   });
 }

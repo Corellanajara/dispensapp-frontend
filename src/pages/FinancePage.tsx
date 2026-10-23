@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { financeAPI } from '@/services/api';
+import { financeAPI, apiErrorMessage } from '@/services/api';
 import type { FinanceTransaction, User } from '@/types';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -18,10 +18,24 @@ import {
 } from '@/components/ui/select';
 import { Plus, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
-import { FINANCE_CATEGORY_LABELS } from '@/lib/constants';
+import { FINANCE_CATEGORY_LABELS as BASE_CATEGORY_LABELS } from '@/lib/constants';
+import { useAppConfig } from '@/hooks/use-app-config';
 import { formatCurrency, formatDateShort } from '@/lib/format';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { StatCard } from '@/components/shared/StatCard';
+
+/** Las notas de dispensación no son ventas: estas categorías solo aparecen si hubo cobros antiguos. */
+const FINANCE_CATEGORY_LABELS: Record<string, string> = {
+  ...BASE_CATEGORY_LABELS,
+  ventas: 'Ingresos varios',
+  venta_productos: 'Cobro de nota (pagos antiguos)',
+  pago_pedido: 'Pago en línea (pagos antiguos)',
+};
+
+/** Categorías que se pueden registrar a mano. */
+const MANUAL_CATEGORIES = Object.entries(FINANCE_CATEGORY_LABELS).filter(
+  ([k]) => !['ventas', 'venta_productos', 'pago_pedido'].includes(k)
+);
 
 interface Summary {
   ingresos: { total: number; cantidad: number };
@@ -31,6 +45,7 @@ interface Summary {
 }
 
 export function FinancePage() {
+  const { pagosHabilitados } = useAppConfig();
   const [transactions, setTransactions] = useState<FinanceTransaction[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [total, setTotal] = useState(0);
@@ -82,14 +97,13 @@ export function FinancePage() {
       fetchTransactions();
       fetchSummary();
     } catch (err: unknown) {
-      const axiosError = err as { response?: { data?: { message?: string } } };
-      toast.error(axiosError.response?.data?.message || 'Error al crear transacción');
+      toast.error(apiErrorMessage(err, 'Error al crear transacción'));
     }
   };
 
   return (
     <div className="space-y-8 animate-fade-in">
-      <PageHeader title="Finanzas" description="Gestión financiera">
+      <PageHeader title="Finanzas" description="Ingresos y egresos del dispensario">
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <Button onClick={() => setIsCreateOpen(true)}><Plus className="h-4 w-4 mr-2" />Nueva Transacción</Button>
           <DialogContent>
@@ -110,7 +124,7 @@ export function FinancePage() {
                 <div className="space-y-2">
                   <Label>Categoría</Label>
                   <select name="categoria" required className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
-                    {Object.entries(FINANCE_CATEGORY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    {MANUAL_CATEGORIES.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
                 </div>
                 <div className="space-y-2">
@@ -134,6 +148,13 @@ export function FinancePage() {
           </DialogContent>
         </Dialog>
       </PageHeader>
+
+      {!pagosHabilitados && (
+        <p className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+          Las notas de dispensación no generan cobros al paciente, así que no se registran ingresos automáticos.
+          Aquí se anotan egresos (insumos, sueldos, etc.) y otros movimientos manuales.
+        </p>
+      )}
 
       {/* Summary Cards */}
       {summary && (
@@ -181,7 +202,7 @@ export function FinancePage() {
           <Card>
             <CardHeader>
               <Select value={typeFilter} onValueChange={(v: string | null) => { setTypeFilter(v === 'all' || !v ? '' : v); setPage(1); }}>
-                <SelectTrigger className="w-[180px]"><SelectValue placeholder="Tipo" /></SelectTrigger>
+                <SelectTrigger className="w-[180px]"><SelectValue placeholder="Tipo">{(v: string) => (v === 'ingreso' ? 'Ingresos' : v === 'egreso' ? 'Egresos' : 'Todos')}</SelectValue></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
                   <SelectItem value="ingreso">Ingresos</SelectItem>

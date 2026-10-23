@@ -1,44 +1,40 @@
 import { useEffect, useState, useCallback } from 'react';
-import { usersAPI, authAPI } from '@/services/api';
+import { usersAPI, apiErrorMessage } from '@/services/api';
 import type { User, UserRole } from '@/types';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label';
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import { Plus, Search, UserCheck, UserX } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Plus, Search, UserCheck, UserX, Pencil, LockOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDateShort } from '@/lib/format';
+import { USER_ROLE_LABELS } from '@/lib/constants';
 import { PageHeader } from '@/components/shared/PageHeader';
-
-const roleLabels: Record<UserRole, string> = {
-  admin: 'Administrador', operador: 'Operador', produccion: 'Producción',
-  finanzas: 'Finanzas', paciente: 'Paciente',
-};
+import { UserFormDialog } from '@/components/admin/UserFormDialog';
+import { useAuth } from '@/contexts/AuthContext';
 
 const roleColors: Record<UserRole, string> = {
-  admin: 'bg-purple-100 text-purple-800', operador: 'bg-blue-100 text-blue-800',
-  produccion: 'bg-orange-100 text-orange-800', finanzas: 'bg-green-100 text-green-800',
+  admin: 'bg-purple-100 text-purple-800',
+  operador: 'bg-blue-100 text-blue-800',
+  produccion: 'bg-orange-100 text-orange-800',
+  cultivo: 'bg-emerald-100 text-emerald-800',
+  finanzas: 'bg-green-100 text-green-800',
   paciente: 'bg-gray-100 text-gray-800',
 };
 
 export function UsersPage() {
+  const { user: me } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [total, setTotal] = useState(0);
+  const [pages, setPages] = useState(1);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<User | null>(null);
 
   const fetchUsers = useCallback(async () => {
     setIsLoading(true);
@@ -49,8 +45,9 @@ export function UsersPage() {
       const { data } = await usersAPI.list(params);
       setUsers(data.data);
       setTotal(data.pagination.total);
-    } catch {
-      toast.error('Error al cargar usuarios');
+      setPages(data.pagination.pages || 1);
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Error al cargar usuarios'));
     } finally {
       setIsLoading(false);
     }
@@ -58,104 +55,94 @@ export function UsersPage() {
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
-  const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const form = new FormData(e.currentTarget);
-    try {
-      await authAPI.register({
-        email: form.get('email') as string,
-        password: form.get('password') as string,
-        nombre: form.get('nombre') as string,
-        apellido: form.get('apellido') as string,
-        rut: form.get('rut') as string,
-        role: form.get('role') as string,
-        telefono: form.get('telefono') as string,
-      });
-      toast.success('Usuario creado');
-      setIsCreateOpen(false);
-      fetchUsers();
-    } catch (err: unknown) {
-      const axiosError = err as { response?: { data?: { message?: string } } };
-      toast.error(axiosError.response?.data?.message || 'Error al crear usuario');
-    }
-  };
-
   const handleToggleActive = async (id: string) => {
     try {
       await usersAPI.toggleActive(id);
       toast.success('Estado actualizado');
       fetchUsers();
-    } catch {
-      toast.error('Error al cambiar estado');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Error al cambiar estado'));
     }
   };
 
+  const handleUnlock = async (u: User) => {
+    try {
+      await usersAPI.unlock(u._id);
+      toast.success(`Cuenta de ${u.nombre} desbloqueada`);
+      fetchUsers();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Error al desbloquear'));
+    }
+  };
+
+  const openCreate = () => { setEditing(null); setFormOpen(true); };
+  const openEdit = (u: User) => { setEditing(u); setFormOpen(true); };
+
+  const estaBloqueado = (u: User) => !!u.bloqueadoHasta && new Date(u.bloqueadoHasta).getTime() > Date.now();
+
+  const isMe = (u: User) => !!me && (u._id === me.id || u.email === me.email);
+
+  const actions = (u: User) => (
+    <div className="flex items-center gap-1">
+      {u.role !== 'paciente' && (
+        <Button variant="ghost" size="sm" title="Editar rol y dispensarios" onClick={() => openEdit(u)}>
+          <Pencil className="h-4 w-4" />
+        </Button>
+      )}
+      {estaBloqueado(u) && (
+        <Button
+          variant="ghost"
+          size="sm"
+          title="Desbloquear (bloqueada por intentos fallidos de inicio de sesión)"
+          onClick={() => handleUnlock(u)}
+        >
+          <LockOpen className="h-4 w-4 text-amber-600" />
+        </Button>
+      )}
+      {!isMe(u) && (
+        <Button
+          variant="ghost"
+          size="sm"
+          title={u.activo ? 'Desactivar' : 'Activar'}
+          onClick={() => handleToggleActive(u._id)}
+        >
+          {u.activo ? <UserX className="h-4 w-4 text-red-600" /> : <UserCheck className="h-4 w-4 text-green-600" />}
+        </Button>
+      )}
+    </div>
+  );
+
+  const sucursalesText = (u: User) =>
+    u.role === 'admin' ? 'Todos' : u.sucursales?.length ? u.sucursales.map((s) => s.codigo).join(', ') : '—';
+
   return (
     <div className="space-y-8 animate-fade-in">
-      <PageHeader title="Usuarios" description="Gestión de usuarios del sistema">
-        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <Button onClick={() => setIsCreateOpen(true)}><Plus className="h-4 w-4 mr-2" />Nuevo Usuario</Button>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Crear Usuario</DialogTitle></DialogHeader>
-            <form onSubmit={handleCreate} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Nombre</Label>
-                  <Input name="nombre" required />
-                </div>
-                <div className="space-y-2">
-                  <Label>Apellido</Label>
-                  <Input name="apellido" required />
-                </div>
-                <div className="space-y-2">
-                  <Label>RUT</Label>
-                  <Input name="rut" required />
-                </div>
-                <div className="space-y-2">
-                  <Label>Email</Label>
-                  <Input name="email" type="email" required />
-                </div>
-                <div className="space-y-2">
-                  <Label>Contraseña</Label>
-                  <Input name="password" type="password" minLength={6} required />
-                </div>
-                <div className="space-y-2">
-                  <Label>Teléfono</Label>
-                  <Input name="telefono" />
-                </div>
-                <div className="space-y-2 col-span-2">
-                  <Label>Rol</Label>
-                  <select name="role" required className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
-                    {Object.entries(roleLabels)
-                      .filter(([k]) => k !== 'paciente')
-                      .map(([k, v]) => (
-                        <option key={k} value={k}>{v}</option>
-                      ))}
-                  </select>
-                </div>
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>Cancelar</Button>
-                <Button type="submit">Crear</Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+      <PageHeader title="Usuarios" description="Cuentas del personal, roles y dispensarios asignados">
+        <Button onClick={openCreate}><Plus className="h-4 w-4 mr-2" />Nuevo usuario</Button>
       </PageHeader>
+
+      <UserFormDialog open={formOpen} onOpenChange={setFormOpen} user={editing} onSaved={fetchUsers} />
 
       <Card>
         <CardHeader>
-          <div className="flex items-center gap-4">
-            <div className="relative flex-1 max-w-sm">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Buscar usuarios..." value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="pl-10 rounded-xl" />
+              <Input
+                placeholder="Buscar usuarios…"
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                className="pl-10 rounded-xl"
+              />
             </div>
-            <Select value={roleFilter} onValueChange={(v: string | null) => { setRoleFilter(v === 'all' || !v ? '' : v); setPage(1); }}>
-              <SelectTrigger className="w-[180px]"><SelectValue placeholder="Rol" /></SelectTrigger>
+            <Select
+              value={roleFilter || 'all'}
+              onValueChange={(v: string | null) => { setRoleFilter(v === 'all' || !v ? '' : v); setPage(1); }}
+            >
+              <SelectTrigger className="w-[180px]"><SelectValue placeholder="Rol">{(v: string) => (v && v !== 'all' ? USER_ROLE_LABELS[v] ?? v : 'Todos los roles')}</SelectValue></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                {Object.entries(roleLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                <SelectItem value="all">Todos los roles</SelectItem>
+                {Object.entries(USER_ROLE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -165,7 +152,7 @@ export function UsersPage() {
             <div className="flex justify-center py-10"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>
           ) : (
             <>
-              {/* Vista cards en móvil */}
+              {/* Móvil */}
               <div className="md:hidden space-y-3">
                 {users.length === 0 ? (
                   <p className="text-center py-12 text-sm text-muted-foreground/70">No se encontraron usuarios</p>
@@ -175,29 +162,27 @@ export function UsersPage() {
                       <CardContent className="pt-4">
                         <div className="flex justify-between items-start gap-2">
                           <p className="font-medium">{u.nombre} {u.apellido}</p>
-                          <div className="flex items-center gap-1">
-                            <Badge className={u.activo ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
-                              {u.activo ? 'Activo' : 'Inactivo'}
-                            </Badge>
-                            <Button variant="ghost" size="sm" onClick={() => handleToggleActive(u._id)}>
-                              {u.activo ? <UserX className="h-4 w-4 text-red-600" /> : <UserCheck className="h-4 w-4 text-green-600" />}
-                            </Button>
-                          </div>
+                          <Badge className={u.activo ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+                            {u.activo ? 'Activo' : 'Inactivo'}
+                          </Badge>
+                          {estaBloqueado(u) && (
+                            <Badge className="ml-1 bg-amber-100 text-amber-800">Bloqueada</Badge>
+                          )}
                         </div>
                         <p className="text-sm text-muted-foreground">{u.email}</p>
                         <p className="text-xs font-mono">RUT {u.rut}</p>
-                        <div className="flex items-center gap-2 mt-2">
-                          <Badge className={roleColors[u.role]}>{roleLabels[u.role]}</Badge>
-                          {u.ultimoAcceso && (
-                            <span className="text-xs text-muted-foreground">Último acceso: {formatDateShort(u.ultimoAcceso)}</span>
-                          )}
+                        <div className="flex flex-wrap items-center gap-2 mt-2">
+                          <Badge className={roleColors[u.role]}>{USER_ROLE_LABELS[u.role]}</Badge>
+                          <span className="text-xs text-muted-foreground">Dispensarios: {sucursalesText(u)}</span>
                         </div>
+                        <div className="mt-2">{actions(u)}</div>
                       </CardContent>
                     </Card>
                   ))
                 )}
               </div>
-              {/* Tabla en desktop */}
+
+              {/* Escritorio */}
               <div className="hidden md:block overflow-x-auto rounded-2xl border">
                 <Table>
                   <TableHeader>
@@ -206,8 +191,9 @@ export function UsersPage() {
                       <TableHead>Email</TableHead>
                       <TableHead>RUT</TableHead>
                       <TableHead>Rol</TableHead>
+                      <TableHead>Dispensarios</TableHead>
                       <TableHead>Estado</TableHead>
-                      <TableHead>Último Acceso</TableHead>
+                      <TableHead>Último acceso</TableHead>
                       <TableHead>Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -217,23 +203,23 @@ export function UsersPage() {
                         <TableCell className="font-medium">{u.nombre} {u.apellido}</TableCell>
                         <TableCell>{u.email}</TableCell>
                         <TableCell className="font-mono">{u.rut}</TableCell>
-                        <TableCell><Badge className={roleColors[u.role]}>{roleLabels[u.role]}</Badge></TableCell>
+                        <TableCell><Badge className={roleColors[u.role]}>{USER_ROLE_LABELS[u.role]}</Badge></TableCell>
+                        <TableCell className="text-sm">{sucursalesText(u)}</TableCell>
                         <TableCell>
                           <Badge className={u.activo ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
                             {u.activo ? 'Activo' : 'Inactivo'}
                           </Badge>
+                          {estaBloqueado(u) && (
+                            <Badge className="ml-1 bg-amber-100 text-amber-800">Bloqueada</Badge>
+                          )}
                         </TableCell>
-                        <TableCell>{u.ultimoAcceso ? formatDateShort(u.ultimoAcceso) : '-'}</TableCell>
-                        <TableCell>
-                          <Button variant="ghost" size="sm" onClick={() => handleToggleActive(u._id)}>
-                            {u.activo ? <UserX className="h-4 w-4 text-red-600" /> : <UserCheck className="h-4 w-4 text-green-600" />}
-                          </Button>
-                        </TableCell>
+                        <TableCell>{u.ultimoAcceso ? formatDateShort(u.ultimoAcceso) : '—'}</TableCell>
+                        <TableCell>{actions(u)}</TableCell>
                       </TableRow>
                     ))}
                     {users.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-12 text-sm text-muted-foreground/70">
+                        <TableCell colSpan={8} className="text-center py-12 text-sm text-muted-foreground/70">
                           No se encontraron usuarios
                         </TableCell>
                       </TableRow>
@@ -241,11 +227,12 @@ export function UsersPage() {
                   </TableBody>
                 </Table>
               </div>
+
               <div className="flex justify-between items-center mt-4">
                 <p className="text-sm text-muted-foreground">Total: {total}</p>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Anterior</Button>
-                  <Button variant="outline" size="sm" disabled={users.length < 20} onClick={() => setPage(page + 1)}>Siguiente</Button>
+                  <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => setPage(page + 1)}>Siguiente</Button>
                 </div>
               </div>
             </>

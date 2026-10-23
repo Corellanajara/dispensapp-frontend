@@ -104,3 +104,43 @@ export function formatRut(rut: string): string {
   const formatted = body.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   return `${formatted}-${verifier}`;
 }
+
+/**
+ * Fecha "solo día" guardada a medianoche UTC (ej. vencimiento de receta).
+ * Usa los componentes UTC para no mostrar el día anterior en Chile.
+ * @example formatDateOnly("2027-01-15T00:00:00.000Z") → "15/01/2027"
+ */
+export function formatDateOnly(date: string | Date | null | undefined): string {
+  if (!date) return '—';
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d.getTime())) return '—';
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  return `${dd}/${mm}/${d.getUTCFullYear()}`;
+}
+
+/** Días desde hoy hasta una fecha "solo día" (negativo si ya pasó). */
+export function daysUntil(date: string | Date | null | undefined): number | null {
+  if (!date) return null;
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d.getTime())) return null;
+  const hoy = new Date();
+  const hoyUTC = Date.UTC(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+  const objetivo = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  return Math.round((objetivo - hoyUTC) / 86400000);
+}
+
+/** Valor para <input type="date"> a partir de una fecha "solo día". */
+export function toDateInputValue(date: string | Date | null | undefined): string {
+  if (!date) return '';
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d.getTime())) return '';
+  return d.toISOString().slice(0, 10);
+}
+
+/** Nombre de un usuario poblado o "—". */
+export function personName(u: unknown): string {
+  if (!u || typeof u !== 'object') return '—';
+  const p = u as { nombre?: string; apellido?: string };
+  return `${p.nombre ?? ''} ${p.apellido ?? ''}`.trim() || '—';
+}

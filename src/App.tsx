@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -18,6 +18,7 @@ import { ProductionPage } from '@/pages/ProductionPage';
 import { FinancePage } from '@/pages/FinancePage';
 import { UsersPage } from '@/pages/UsersPage';
 import { AuditPage } from '@/pages/AuditPage';
+import { SucursalesPage } from '@/pages/SucursalesPage';
 import { PatientRegisterPage } from '@/pages/patient/PatientRegisterPage';
 import { PatientDashboardPage } from '@/pages/patient/PatientDashboardPage';
 import { CatalogPage } from '@/pages/patient/CatalogPage';
@@ -25,6 +26,13 @@ import { PatientOrdersPage } from '@/pages/patient/PatientOrdersPage';
 import { PatientNewOrderPage } from '@/pages/patient/PatientNewOrderPage';
 import { PatientOrderDetailPage } from '@/pages/patient/PatientOrderDetailPage';
 import { PatientProfilePage } from '@/pages/patient/PatientProfilePage';
+import { PatientExpedientePage } from '@/pages/PatientExpedientePage';
+import { CultivoPage } from '@/pages/CultivoPage';
+import { EspacioDetailPage } from '@/pages/EspacioDetailPage';
+import { QRScanPage } from '@/pages/QRScanPage';
+import { UbicacionesPage } from '@/pages/UbicacionesPage';
+import { TransferenciasPage } from '@/pages/TransferenciasPage';
+import { FiscalizacionPage } from '@/pages/FiscalizacionPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -39,7 +47,9 @@ const queryClient = new QueryClient({
 
 function AuthRedirect() {
   const { user } = useAuth();
-  if (user) return <Navigate to={user.role === 'paciente' ? '/portal' : '/'} replace />;
+  const location = useLocation();
+  const from = (location.state as { from?: string } | null)?.from;
+  if (user) return <Navigate to={from ?? (user.role === 'paciente' ? '/portal' : '/')} replace />;
   return <LoginPage />;
 }
 
@@ -64,13 +74,22 @@ function App() {
                 <Route path="/" element={<DashboardPage />} />
                 <Route path="/pacientes" element={<ProtectedRoute roles={['admin', 'operador']}><PatientsPage /></ProtectedRoute>} />
                 <Route path="/pacientes/:id" element={<ProtectedRoute roles={['admin', 'operador']}><PatientDetailPage /></ProtectedRoute>} />
-                <Route path="/productos" element={<ProtectedRoute roles={['admin', 'operador', 'produccion']}><ProductsPage /></ProtectedRoute>} />
+                <Route path="/pacientes/:id/expediente" element={<ProtectedRoute roles={['admin', 'operador']}><PatientExpedientePage /></ProtectedRoute>} />
+                {/* /pedidos = notas de dispensación (se mantiene la ruta para no romper enlaces) */}
                 <Route path="/pedidos" element={<ProtectedRoute roles={['admin', 'operador']}><OrdersPage /></ProtectedRoute>} />
                 <Route path="/pedidos/:id" element={<ProtectedRoute roles={['admin', 'operador']}><OrderDetailPage /></ProtectedRoute>} />
-                <Route path="/inventario" element={<ProtectedRoute roles={['admin', 'operador']}><InventoryPage /></ProtectedRoute>} />
+                <Route path="/cultivo" element={<ProtectedRoute roles={['admin', 'operador', 'cultivo']}><CultivoPage /></ProtectedRoute>} />
+                <Route path="/cultivo/espacios/:id" element={<ProtectedRoute roles={['admin', 'operador', 'cultivo']}><EspacioDetailPage /></ProtectedRoute>} />
+                <Route path="/qr/:codigo" element={<ProtectedRoute roles={['admin', 'operador', 'cultivo', 'produccion']}><QRScanPage /></ProtectedRoute>} />
+                <Route path="/productos" element={<ProtectedRoute roles={['admin', 'operador', 'produccion']}><ProductsPage /></ProtectedRoute>} />
+                <Route path="/inventario" element={<ProtectedRoute roles={['admin', 'operador', 'cultivo', 'produccion']}><InventoryPage /></ProtectedRoute>} />
+                <Route path="/transferencias" element={<ProtectedRoute roles={['admin', 'operador', 'cultivo', 'produccion']}><TransferenciasPage /></ProtectedRoute>} />
+                <Route path="/ubicaciones" element={<ProtectedRoute roles={['admin', 'operador', 'cultivo', 'produccion']}><UbicacionesPage /></ProtectedRoute>} />
                 <Route path="/produccion" element={<ProtectedRoute roles={['admin', 'operador', 'produccion']}><ProductionPage /></ProtectedRoute>} />
+                <Route path="/fiscalizacion" element={<ProtectedRoute roles={['admin', 'operador']}><FiscalizacionPage /></ProtectedRoute>} />
                 <Route path="/finanzas" element={<ProtectedRoute roles={['admin', 'finanzas']}><FinancePage /></ProtectedRoute>} />
                 <Route path="/usuarios" element={<ProtectedRoute roles={['admin']}><UsersPage /></ProtectedRoute>} />
+                <Route path="/sucursales" element={<ProtectedRoute roles={['admin']}><SucursalesPage /></ProtectedRoute>} />
                 <Route path="/auditoria" element={<ProtectedRoute roles={['admin']}><AuditPage /></ProtectedRoute>} />
               </Route>
 

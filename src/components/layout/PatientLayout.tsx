@@ -3,15 +3,15 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Toaster } from '@/components/ui/sonner';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
-import { Leaf, Moon, Sun, LogOut, Package, ShoppingCart, User, LayoutDashboard, Menu, X } from 'lucide-react';
+import { Leaf, Moon, Sun, LogOut, Package, ClipboardList, User, LayoutDashboard, Menu, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 
 const patientNav = [
-  { title: 'Mi Panel', url: '/portal', icon: LayoutDashboard },
-  { title: 'Catálogo', url: '/portal/catalogo', icon: Package },
-  { title: 'Mis Pedidos', url: '/portal/pedidos', icon: ShoppingCart },
-  { title: 'Mi Perfil', url: '/portal/perfil', icon: User },
+  { title: 'Inicio', url: '/portal', icon: LayoutDashboard },
+  { title: 'Productos disponibles', url: '/portal/catalogo', icon: Package },
+  { title: 'Mis solicitudes', url: '/portal/pedidos', icon: ClipboardList },
+  { title: 'Mi perfil', url: '/portal/perfil', icon: User },
 ];
 
 function ThemeToggle() {
@@ -73,7 +73,7 @@ export function PatientLayout() {
                 {user?.nombre?.charAt(0)}{user?.apellido?.charAt(0)}
               </div>
               <span className="text-sm font-medium">{user?.nombre}</span>
-              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl hover:bg-accent/60" onClick={logout}>
+              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl hover:bg-accent/60" onClick={logout} aria-label="Cerrar sesión">
                 <LogOut className="h-4 w-4" />
               </Button>
             </div>
@@ -114,7 +114,7 @@ export function PatientLayout() {
               <div className="border-t border-border/50 mt-2 pt-3">
                 <Button variant="ghost" size="sm" className="w-full justify-start rounded-xl" onClick={logout}>
                   <LogOut className="h-4 w-4 mr-2" />
-                  Cerrar Sesión
+                  Cerrar sesión
                 </Button>
               </div>
             </nav>

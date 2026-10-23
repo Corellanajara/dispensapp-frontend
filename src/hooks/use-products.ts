@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { productsAPI } from '@/services/api';
+import { productsAPI, apiErrorMessage } from '@/services/api';
 import type { Product } from '@/types';
 import { toast } from 'sonner';
 
@@ -34,7 +34,7 @@ export function useCreateProduct() {
       qc.invalidateQueries({ queryKey: productKeys.lists() });
       toast.success('Producto creado correctamente');
     },
-    onError: () => toast.error('Error al crear producto'),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Error al crear producto')),
   });
 }
 
@@ -48,7 +48,7 @@ export function useUpdateProduct() {
       qc.invalidateQueries({ queryKey: productKeys.lists() });
       toast.success('Producto actualizado');
     },
-    onError: () => toast.error('Error al actualizar producto'),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Error al actualizar producto')),
   });
 }
 
@@ -60,7 +60,7 @@ export function useDeleteProduct() {
       qc.invalidateQueries({ queryKey: productKeys.lists() });
       toast.success('Producto eliminado');
     },
-    onError: () => toast.error('Error al eliminar producto'),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Error al eliminar producto')),
   });
 }
 
@@ -74,6 +74,6 @@ export function useUploadProductImage() {
       qc.invalidateQueries({ queryKey: productKeys.lists() });
       toast.success('Imagen subida correctamente');
     },
-    onError: () => toast.error('Error al subir imagen'),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Error al subir imagen')),
   });
 }

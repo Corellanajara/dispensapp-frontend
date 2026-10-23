@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { authAPI } from '@/services/api';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { authAPI, sucursalesAPI, apiErrorMessage } from '@/services/api';
+import type { Sucursal } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,7 +12,16 @@ import { Leaf, AlertCircle, Loader2 } from 'lucide-react';
 export function PatientRegisterPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const navigate = useNavigate();
+  const [sucursales, setSucursales] = useState<Pick<Sucursal, '_id' | 'nombre' | 'codigo' | 'direccion'>[]>([]);
+  const [cargandoSucursales, setCargandoSucursales] = useState(true);
+
+  useEffect(() => {
+    sucursalesAPI
+      .publicas()
+      .then(({ data }) => setSucursales(data))
+      .catch(() => setError('No se pudo cargar la lista de dispensarios. Recarga la página.'))
+      .finally(() => setCargandoSucursales(false));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -31,12 +41,19 @@ export function PatientRegisterPage() {
       return;
     }
 
+    const sucursal = form.get('sucursal') as string;
+    if (!sucursal) {
+      setError('Selecciona tu dispensario');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       const data: Record<string, unknown> = {
         email: form.get('email'),
         password,
+        sucursal,
         nombre: form.get('nombre'),
         apellido: form.get('apellido'),
         rut: form.get('rut'),
@@ -59,10 +76,11 @@ export function PatientRegisterPage() {
       const { data: res } = await authAPI.registerPatient(data);
       localStorage.setItem('token', res.token);
       localStorage.setItem('user', JSON.stringify(res.user));
-      navigate('/portal');
+      localStorage.setItem('sucursalActiva', String(res.user.sucursalActiva || sucursal));
+      // Recarga completa para que la sesión se lea desde el inicio
+      window.location.href = '/portal';
     } catch (err: unknown) {
-      const axiosError = err as { response?: { data?: { message?: string } } };
-      setError(axiosError.response?.data?.message || 'Error al registrar. Intenta nuevamente.');
+      setError(apiErrorMessage(err, 'Error al registrar. Intenta nuevamente.'));
     } finally {
       setIsLoading(false);
     }
@@ -95,6 +113,37 @@ export function PatientRegisterPage() {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
+
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/70">Dispensario</span>
+                <div className="h-px flex-1 bg-border/40" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sucursal">¿En qué dispensario te atiendes?</Label>
+                <select
+                  id="sucursal"
+                  name="sucursal"
+                  required
+                  defaultValue=""
+                  disabled={cargandoSucursales}
+                  className={`${inputClassName} w-full border text-sm outline-none focus-visible:ring-3`}
+                >
+                  <option value="" disabled>
+                    {cargandoSucursales ? 'Cargando dispensarios...' : 'Selecciona tu dispensario'}
+                  </option>
+                  {sucursales.map((s) => (
+                    <option key={s._id} value={s._id}>
+                      {s.nombre}
+                      {s.direccion?.comuna ? ` — ${s.direccion.comuna}` : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  Tu ficha y tus documentos quedan en ese dispensario.
+                </p>
+              </div>
+            </div>
 
             <div className="space-y-4">
               <div className="flex items-center gap-3">
@@ -199,7 +248,7 @@ export function PatientRegisterPage() {
             <Button
               type="submit"
               className="w-full h-11 rounded-xl text-sm font-semibold shadow-md shadow-primary/15 hover:shadow-lg hover:shadow-primary/25 transition-all"
-              disabled={isLoading}
+              disabled={isLoading || cargandoSucursales}
             >
               {isLoading ? (
                 <>

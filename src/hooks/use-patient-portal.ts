@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { patientPortalAPI } from '@/services/api';
+import { patientPortalAPI, apiErrorMessage } from '@/services/api';
 import { toast } from 'sonner';
 
 export const portalKeys = {
@@ -26,7 +26,7 @@ export function useUpdatePatientProfile() {
       qc.invalidateQueries({ queryKey: portalKeys.profile() });
       toast.success('Perfil actualizado');
     },
-    onError: () => toast.error('Error al actualizar perfil'),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Error al actualizar perfil')),
   });
 }
 
@@ -36,9 +36,9 @@ export function useUploadPortalDocument() {
     mutationFn: (formData: FormData) => patientPortalAPI.uploadDocument(formData).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: portalKeys.profile() });
-      toast.success('Documento subido correctamente');
+      toast.success('Documento subido. El dispensario lo revisará.');
     },
-    onError: () => toast.error('Error al subir documento'),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Error al subir documento')),
   });
 }
 
@@ -70,9 +70,10 @@ export function useCreatePatientOrder() {
     mutationFn: (data: Record<string, unknown>) => patientPortalAPI.createOrder(data).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: portalKeys.orders() });
-      toast.success('Pedido creado correctamente');
+      qc.invalidateQueries({ queryKey: portalKeys.profile() });
+      toast.success('Solicitud enviada');
     },
-    onError: () => toast.error('Error al crear pedido'),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Error al crear la solicitud')),
   });
 }
 
@@ -83,8 +84,9 @@ export function useCancelPatientOrder() {
     onSuccess: (_, id) => {
       qc.invalidateQueries({ queryKey: portalKeys.orderDetail(id) });
       qc.invalidateQueries({ queryKey: portalKeys.orders() });
-      toast.success('Pedido cancelado');
+      toast.success('Solicitud anulada');
     },
-    onError: () => toast.error('Error al cancelar pedido'),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Error al anular la solicitud')),
   });
 }
+

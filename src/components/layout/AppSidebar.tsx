@@ -17,7 +17,6 @@ import {
   LayoutDashboard,
   Users,
   Package,
-  ShoppingCart,
   Warehouse,
   Factory,
   DollarSign,
@@ -25,9 +24,17 @@ import {
   Shield,
   LogOut,
   Leaf,
+  Building2,
+  Sprout,
+  MapPin,
+  ArrowLeftRight,
+  FileSearch,
+  ClipboardList,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { UserRole } from '@/types';
+import { USER_ROLE_LABELS } from '@/lib/constants';
 import type { LucideIcon } from 'lucide-react';
 
 interface NavItem {
@@ -47,31 +54,41 @@ const navGroups: NavGroup[] = [
   {
     label: 'General',
     items: [
-      { title: 'Dashboard', url: '/', icon: LayoutDashboard, roles: ['admin', 'operador', 'produccion', 'finanzas'], shortcut: 'D' },
+      { title: 'Dashboard', url: '/', icon: LayoutDashboard, roles: ['admin', 'operador', 'produccion', 'cultivo', 'finanzas'], shortcut: 'D' },
     ],
   },
   {
-    label: 'Operaciones',
+    label: 'Pacientes',
     items: [
       { title: 'Pacientes', url: '/pacientes', icon: Users, roles: ['admin', 'operador'], shortcut: 'P' },
-      { title: 'Pedidos', url: '/pedidos', icon: ShoppingCart, roles: ['admin', 'operador'], shortcut: 'O' },
+      { title: 'Dispensación', url: '/pedidos', icon: ClipboardList, roles: ['admin', 'operador'], shortcut: 'O' },
+    ],
+  },
+  {
+    label: 'Cultivo e inventario',
+    items: [
+      { title: 'Cultivo', url: '/cultivo', icon: Sprout, roles: ['admin', 'operador', 'cultivo'] },
+      { title: 'Inventario', url: '/inventario', icon: Warehouse, roles: ['admin', 'operador', 'cultivo', 'produccion'] },
+      { title: 'Transferencias', url: '/transferencias', icon: ArrowLeftRight, roles: ['admin', 'operador', 'cultivo', 'produccion'] },
+      { title: 'Ubicaciones', url: '/ubicaciones', icon: MapPin, roles: ['admin', 'operador', 'cultivo', 'produccion'] },
       { title: 'Productos', url: '/productos', icon: Package, roles: ['admin', 'operador', 'produccion'] },
-      { title: 'Inventario', url: '/inventario', icon: Warehouse, roles: ['admin', 'operador'] },
       { title: 'Producción', url: '/produccion', icon: Factory, roles: ['admin', 'operador', 'produccion'] },
     ],
   },
   {
     label: 'Administración',
     items: [
+      { title: 'Fiscalización', url: '/fiscalizacion', icon: FileSearch, roles: ['admin', 'operador'] },
       { title: 'Finanzas', url: '/finanzas', icon: DollarSign, roles: ['admin', 'finanzas'] },
       { title: 'Usuarios', url: '/usuarios', icon: Settings, roles: ['admin'] },
+      { title: 'Sucursales', url: '/sucursales', icon: Building2, roles: ['admin'] },
       { title: 'Auditoría', url: '/auditoria', icon: Shield, roles: ['admin'] },
     ],
   },
 ];
 
 export function AppSidebar() {
-  const { user, logout, hasRole } = useAuth();
+  const { user, logout, hasRole, sucursalActiva, setSucursalActiva } = useAuth();
   const { pathname } = useLocation();
   const { isMobile, setOpenMobile } = useSidebar();
 
@@ -97,6 +114,32 @@ export function AppSidebar() {
           </div>
         </Link>
       </SidebarHeader>
+
+      {user && user.role !== 'paciente' && user.sucursales?.length > 0 && (
+        <div className="px-5 pb-2">
+          <Select
+            value={sucursalActiva?._id || ''}
+            onValueChange={(val) => { if (val) setSucursalActiva(val); }}
+          >
+            <SelectTrigger className="w-full rounded-xl h-9 text-xs">
+              <Building2 className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+              <SelectValue placeholder="Seleccionar sucursal">
+                {(value: string) => {
+                  const s = user.sucursales.find((x) => x._id === value);
+                  return s ? `${s.nombre} (${s.codigo})` : 'Seleccionar sucursal';
+                }}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {user.sucursales.map((s) => (
+                <SelectItem key={s._id} value={s._id} className="text-xs">
+                  {s.nombre} ({s.codigo})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       <SidebarContent className="px-3">
         {navGroups.map((group) => {
@@ -156,7 +199,7 @@ export function AppSidebar() {
             <p className="text-sm font-medium truncate">
               {user?.nombre} {user?.apellido}
             </p>
-            <p className="text-[11px] text-muted-foreground/70 capitalize">{user?.role}</p>
+            <p className="text-[11px] text-muted-foreground/70">{user?.role ? USER_ROLE_LABELS[user.role] : ''}</p>
           </div>
         </div>
         <Button variant="outline" size="sm" className="w-full rounded-xl" onClick={() => { closeMobileMenu(); logout(); }}>

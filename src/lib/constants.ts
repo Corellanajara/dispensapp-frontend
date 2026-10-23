@@ -9,18 +9,25 @@ import type {
   SignatureStatus,
   DeliveryType,
   TransactionType,
+  DocumentType,
+  UbicacionTipo,
+  TransferenciaEstado,
 } from '@/types';
 
-// ── Order Status ──
+// ── Nota de dispensación (antes "pedido") ──
+// La API sigue usando "orders"; en la interfaz se llama nota de dispensación, no venta.
+
+export const ORDER_LABEL = 'Nota de dispensación';
+export const ORDERS_LABEL = 'Notas de dispensación';
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
-  pendiente_revision: 'Pendiente Revisión',
-  aprobado: 'Aprobado',
-  en_preparacion: 'En Preparación',
-  listo_retiro: 'Listo para Retiro',
-  en_despacho: 'En Despacho',
-  entregado: 'Entregado',
-  cancelado: 'Cancelado',
+  pendiente_revision: 'Pendiente de revisión',
+  aprobado: 'Aprobada',
+  en_preparacion: 'En preparación',
+  listo_retiro: 'Lista para retiro',
+  en_despacho: 'En despacho',
+  entregado: 'Entregada',
+  cancelado: 'Anulada',
 };
 
 export const ORDER_STATUS_VARIANTS: Record<OrderStatus, string> = {
@@ -37,9 +44,14 @@ export const ORDER_STATUS_VARIANTS: Record<OrderStatus, string> = {
 
 export const PATIENT_STATUS_LABELS: Record<PatientStatus, string> = {
   pendiente: 'Pendiente',
-  aprobado: 'Aprobado',
+  aprobado: 'Activo',
   rechazado: 'Rechazado',
   suspendido: 'Suspendido',
+};
+
+export const SUSPENSION_REASON_LABELS: Record<string, string> = {
+  receta_vencida: 'Receta vencida',
+  manual: 'Suspensión manual',
 };
 
 export const PATIENT_STATUS_VARIANTS: Record<PatientStatus, string> = {
@@ -93,11 +105,50 @@ export const PRODUCTION_STATUS_VARIANTS: Record<ProductionStatus, string> = {
 
 export const MOVEMENT_TYPE_LABELS: Record<MovementType, string> = {
   produccion: 'Producción',
+  cosecha: 'Cosecha',
   ingreso: 'Ingreso',
   ajuste: 'Ajuste',
-  venta: 'Venta',
   merma: 'Merma',
-  transferencia: 'Transferencia',
+  dispensacion: 'Dispensación',
+  transferencia_salida: 'Transferencia (salida)',
+  transferencia_entrada: 'Transferencia (entrada)',
+  transferencia_anulada: 'Transferencia anulada',
+  venta: 'Venta (antiguo)',
+  transferencia: 'Transferencia (antiguo)',
+};
+
+// ── Ubicaciones ──
+
+export const UBICACION_TIPO_LABELS: Record<UbicacionTipo, string> = {
+  sala_cultivo: 'Sala de cultivo',
+  bodega: 'Bodega',
+  dispensario: 'Dispensario',
+};
+
+// ── Transferencias ──
+
+export const TRANSFERENCIA_ESTADO_LABELS: Record<TransferenciaEstado, string> = {
+  en_transito: 'En tránsito',
+  recibida: 'Recibida',
+  anulada: 'Anulada',
+};
+
+export const TRANSFERENCIA_ESTADO_VARIANTS: Record<TransferenciaEstado, string> = {
+  en_transito: 'bg-warning/15 text-warning border-warning/25',
+  recibida: 'bg-success/15 text-success border-success/25',
+  anulada: 'bg-muted text-muted-foreground border-border',
+};
+
+// ── Cultivo ──
+
+export const ESPACIO_ESTADO_LABELS: Record<string, string> = {
+  activo: 'Activo',
+  cerrado: 'Cerrado',
+};
+
+export const COSECHA_ESTADO_LABELS: Record<string, string> = {
+  registrada: 'Registrada',
+  en_inventario: 'En inventario',
 };
 
 // ── Payment Status ──
@@ -143,8 +194,8 @@ export const SIGNATURE_STATUS_VARIANTS: Record<SignatureStatus, string> = {
 // ── Delivery Type ──
 
 export const DELIVERY_TYPE_LABELS: Record<DeliveryType, string> = {
-  retiro: 'Retiro en Tienda',
-  despacho: 'Despacho a Domicilio',
+  retiro: 'Retiro en dispensario',
+  despacho: 'Despacho a domicilio',
 };
 
 // ── Transaction Type ──
@@ -165,17 +216,19 @@ export const FINANCE_CATEGORY_LABELS: Record<string, string> = {
   sueldos: 'Sueldos',
   insumos: 'Insumos',
   proveedores: 'Proveedores',
-  venta_productos: 'Venta de Productos',
-  pago_pedido: 'Pago de Pedido',
+  venta_productos: 'Ventas (antiguo)',
+  pago_pedido: 'Pagos de pedidos (antiguo)',
   otro: 'Otro',
 };
 
 // ── Document Types ──
 
-export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
-  receta_medica: 'Receta Médica',
-  certificado_antecedentes: 'Certificado de Antecedentes',
-  cedula_identidad: 'Cédula de Identidad',
+export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
+  receta_medica: 'Receta médica',
+  certificado_antecedentes: 'Certificado de antecedentes',
+  reglamento_interno: 'Reglamento interno',
+  mandato_contrato: 'Mandato o contrato',
+  cedula_identidad: 'Cédula de identidad',
   otro: 'Otro',
 };
 
@@ -199,8 +252,42 @@ export const USER_ROLE_LABELS: Record<string, string> = {
   admin: 'Administrador',
   operador: 'Operador',
   produccion: 'Producción',
+  cultivo: 'Cultivo',
   finanzas: 'Finanzas',
   paciente: 'Paciente',
+};
+
+// ── Auditoría ──
+
+export const AUDIT_ACTION_LABELS: Record<string, string> = {
+  login: 'Inicio de sesión',
+  bloqueo_cuenta: 'Bloqueo de cuenta',
+  desbloquear: 'Desbloqueo de cuenta',
+  crear: 'Crear',
+  actualizar: 'Actualizar',
+  cambiar_estado: 'Cambiar estado',
+  cambiar_sucursal: 'Cambiar dispensario',
+  subir_documento: 'Subir documento',
+  revisar_documento: 'Revisar documento',
+  ver_documento: 'Ver documento',
+  solicitar_firma: 'Solicitar firma',
+  exportar_expediente: 'Exportar expediente',
+  exportar_reporte: 'Exportar reporte',
+  consultar_reporte: 'Consultar reporte',
+  suspension_automatica: 'Suspensión automática',
+  escanear_qr: 'Escanear QR',
+  regenerar_qr: 'Regenerar QR',
+  registrar_cosecha: 'Registrar cosecha',
+  ingresar_cosecha: 'Ingresar cosecha',
+  enviar: 'Enviar',
+  recibir: 'Recibir',
+  anular: 'Anular',
+  cancelar: 'Anular',
+  cerrar: 'Cerrar',
+  toggle_activo: 'Activar/desactivar',
+  registrar_merma: 'Registrar merma',
+  completar: 'Completar',
+  eliminar: 'Eliminar',
 };
 
 // ── Waste Types ──

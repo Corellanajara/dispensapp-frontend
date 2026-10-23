@@ -1,6 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
-import { productsAPI, getProductImageUrl } from '@/services/api';
+import { productsAPI, getProductImageUrl, apiErrorMessage } from '@/services/api';
 import type { Product, ProductType } from '@/types';
+import { useAppConfig } from '@/hooks/use-app-config';
+import { useAuth } from '@/contexts/AuthContext';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { IngresarStockDialog } from '@/components/inventory/StockDialogs';
+import { StockSucursalTab } from '@/components/inventory/StockSucursalTab';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -19,10 +24,15 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Plus, Search, Pencil, Trash2, ImagePlus, X } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, ImagePlus, X, PackagePlus } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function ProductsPage() {
+  const { pagosHabilitados } = useAppConfig();
+  const { hasRole } = useAuth();
+  const puedeIngresarStock = hasRole('admin', 'operador');
+  const puedeEliminar = hasRole('admin');
+  const [stockProduct, setStockProduct] = useState<Product | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -87,12 +97,14 @@ export function ProductsPage() {
       concentracion: form.get('concentracion') as string,
       presentacion: form.get('presentacion') as string,
       usoTerapeutico: form.get('usoTerapeutico') as string,
-      precio: parseFloat(form.get('precio') as string),
       lote: form.get('lote') as string,
       fechaProduccion: form.get('fechaProduccion') as string,
       fechaVencimiento: form.get('fechaVencimiento') as string,
-      cantidadDisponible: parseInt(form.get('cantidadDisponible') as string),
     };
+    // El precio solo se usa con cobros habilitados
+    if (pagosHabilitados) data.precio = parseFloat((form.get('precio') as string) || '0') || 0;
+    // El stock real se ingresa por sucursal ("Ingresar stock"); el campo global queda en 0
+    if (!editingProduct) data.cantidadDisponible = 0;
 
     try {
       let productId: string;
@@ -125,8 +137,7 @@ export function ProductsPage() {
       setEditingProduct(null);
       fetchProducts();
     } catch (err: unknown) {
-      const axiosError = err as { response?: { data?: { message?: string } } };
-      toast.error(axiosError.response?.data?.message || 'Error al guardar producto');
+      toast.error(apiErrorMessage(err, 'Error al guardar producto'));
     }
   };
 
@@ -166,10 +177,12 @@ export function ProductsPage() {
                     ))}
                   </select>
                 </div>
-                <div className="space-y-2">
-                  <Label>Precio (CLP)</Label>
-                  <Input name="precio" type="number" defaultValue={editingProduct?.precio} required />
-                </div>
+                {pagosHabilitados && (
+                  <div className="space-y-2">
+                    <Label>Precio referencial (CLP, opcional)</Label>
+                    <Input name="precio" type="number" min="0" defaultValue={editingProduct?.precio} />
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label>Lote</Label>
                   <Input name="lote" defaultValue={editingProduct?.lote} required />
@@ -181,10 +194,6 @@ export function ProductsPage() {
                 <div className="space-y-2">
                   <Label>Presentación</Label>
                   <Input name="presentacion" defaultValue={editingProduct?.presentacion} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Cantidad Disponible</Label>
-                  <Input name="cantidadDisponible" type="number" defaultValue={editingProduct?.cantidadDisponible || 0} required />
                 </div>
                 <div className="space-y-2">
                   <Label>Uso Terapéutico</Label>
@@ -199,6 +208,9 @@ export function ProductsPage() {
                   <Input name="fechaVencimiento" type="date" defaultValue={editingProduct?.fechaVencimiento?.split('T')[0]} required />
                 </div>
               </div>
+              <p className="text-xs text-muted-foreground">
+                El stock no se carga aquí: después de crear el producto usa “Ingresar stock” para sumarlo a la sucursal y ubicación.
+              </p>
               <div className="space-y-2">
                 <Label>Descripción</Label>
                 <Textarea name="descripcion" defaultValue={editingProduct?.descripcion} />
@@ -277,6 +289,15 @@ export function ProductsPage() {
         </Dialog>
       </PageHeader>
 
+      <Tabs defaultValue="catalogo">
+        <TabsList>
+          <TabsTrigger value="catalogo">Catálogo</TabsTrigger>
+          <TabsTrigger value="stock">Stock en sucursal</TabsTrigger>
+        </TabsList>
+        <TabsContent value="stock">
+          <StockSucursalTab pagosHabilitados={pagosHabilitados} />
+        </TabsContent>
+        <TabsContent value="catalogo">
       <Card>
         <CardHeader>
           <div className="flex items-center gap-4">
@@ -286,7 +307,7 @@ export function ProductsPage() {
                 onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="pl-10 rounded-xl" />
             </div>
             <Select value={typeFilter} onValueChange={(v: string | null) => { setTypeFilter(v === 'all' || !v ? '' : v); setPage(1); }}>
-              <SelectTrigger className="w-[180px]"><SelectValue placeholder="Tipo" /></SelectTrigger>
+              <SelectTrigger className="w-[180px]"><SelectValue placeholder="Tipo">{(v: string) => (v && v !== 'all' ? PRODUCT_TYPE_LABELS[v as keyof typeof PRODUCT_TYPE_LABELS] ?? v : 'Todos')}</SelectValue></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
                 {Object.entries(PRODUCT_TYPE_LABELS).map(([k, v]) => (
@@ -328,10 +349,12 @@ export function ProductsPage() {
                           <StatusBadge label={PRODUCT_STATUS_LABELS[p.estado]} variant={PRODUCT_STATUS_VARIANTS[p.estado]} />
                         </div>
                         <div className="grid grid-cols-2 gap-1 mt-2 text-sm">
-                          <span className="text-muted-foreground">Precio</span>
-                          <span className="text-right font-medium">{formatCurrency(p.precio)}</span>
-                          <span className="text-muted-foreground">Stock</span>
-                          <span className="text-right">{p.cantidadDisponible}</span>
+                          {pagosHabilitados && (
+                            <>
+                              <span className="text-muted-foreground">Precio</span>
+                              <span className="text-right font-medium">{formatCurrency(p.precio || 0)}</span>
+                            </>
+                          )}
                           {p.concentracion && (
                             <>
                               <span className="text-muted-foreground">Concentración</span>
@@ -343,9 +366,16 @@ export function ProductsPage() {
                           <Button variant="outline" size="sm" className="flex-1" onClick={() => { setEditingProduct(p); setIsDialogOpen(true); }}>
                             <Pencil className="h-4 w-4 mr-1" /> Editar
                           </Button>
-                          <Button variant="outline" size="sm" className="text-destructive" onClick={() => handleDelete(p._id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {puedeIngresarStock && (
+                            <Button variant="outline" size="sm" onClick={() => setStockProduct(p)}>
+                              <PackagePlus className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {puedeEliminar && (
+                            <Button variant="outline" size="sm" className="text-destructive" onClick={() => handleDelete(p._id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
@@ -362,8 +392,7 @@ export function ProductsPage() {
                       <TableHead>Tipo</TableHead>
                       <TableHead>Lote</TableHead>
                       <TableHead>Concentración</TableHead>
-                      <TableHead className="text-right">Precio</TableHead>
-                      <TableHead className="text-right">Stock</TableHead>
+                      {pagosHabilitados && <TableHead className="text-right">Precio</TableHead>}
                       <TableHead>Estado</TableHead>
                       <TableHead>Acciones</TableHead>
                     </TableRow>
@@ -388,8 +417,7 @@ export function ProductsPage() {
                         <TableCell>{PRODUCT_TYPE_LABELS[p.tipo]}</TableCell>
                         <TableCell className="font-mono text-xs">{p.lote}</TableCell>
                         <TableCell>{p.concentracion || '-'}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(p.precio)}</TableCell>
-                        <TableCell className="text-right">{p.cantidadDisponible}</TableCell>
+                        {pagosHabilitados && <TableCell className="text-right">{formatCurrency(p.precio || 0)}</TableCell>}
                         <TableCell>
                           <StatusBadge label={PRODUCT_STATUS_LABELS[p.estado]} variant={PRODUCT_STATUS_VARIANTS[p.estado]} />
                         </TableCell>
@@ -398,16 +426,23 @@ export function ProductsPage() {
                             <Button variant="ghost" size="sm" onClick={() => { setEditingProduct(p); setIsDialogOpen(true); }}>
                               <Pencil className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="sm" onClick={() => handleDelete(p._id)}>
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
+                            {puedeIngresarStock && (
+                              <Button variant="ghost" size="sm" title="Ingresar stock" onClick={() => setStockProduct(p)}>
+                                <PackagePlus className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {puedeEliminar && (
+                              <Button variant="ghost" size="sm" title="Eliminar" onClick={() => handleDelete(p._id)}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
                     ))}
                     {products.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={9} className="text-center py-12 text-sm text-muted-foreground/70">
+                        <TableCell colSpan={pagosHabilitados ? 8 : 7} className="text-center py-12 text-sm text-muted-foreground/70">
                           No se encontraron productos
                         </TableCell>
                       </TableRow>
@@ -426,6 +461,10 @@ export function ProductsPage() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+      </Tabs>
+
+      <IngresarStockDialog product={stockProduct} onClose={() => setStockProduct(null)} pagosHabilitados={pagosHabilitados} />
     </div>
   );
 }

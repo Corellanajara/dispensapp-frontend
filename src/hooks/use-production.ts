@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { productionAPI } from '@/services/api';
+import { productionAPI, apiErrorMessage } from '@/services/api';
 import { toast } from 'sonner';
 
 export const productionKeys = {
@@ -33,7 +33,7 @@ export function useCreateProduction() {
       qc.invalidateQueries({ queryKey: productionKeys.lists() });
       toast.success('Producción iniciada');
     },
-    onError: () => toast.error('Error al iniciar producción'),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Error al iniciar producción')),
   });
 }
 
@@ -47,7 +47,7 @@ export function useCompleteProduction() {
       qc.invalidateQueries({ queryKey: productionKeys.lists() });
       toast.success('Producción completada');
     },
-    onError: () => toast.error('Error al completar producción'),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Error al completar producción')),
   });
 }
 
@@ -60,6 +60,6 @@ export function useAddWaste() {
       qc.invalidateQueries({ queryKey: productionKeys.detail(id) });
       toast.success('Merma registrada');
     },
-    onError: () => toast.error('Error al registrar merma'),
+    onError: (err) => toast.error(apiErrorMessage(err, 'Error al registrar merma')),
   });
 }

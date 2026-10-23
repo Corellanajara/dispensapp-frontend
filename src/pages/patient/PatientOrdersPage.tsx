@@ -1,17 +1,16 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { patientPortalAPI } from '@/services/api';
-import type { Order } from '@/types';
+import type { Order, OrderStatus } from '@/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Plus, ShoppingCart, Eye, Package, CreditCard } from 'lucide-react';
+import { Plus, ClipboardList, Eye, Package } from 'lucide-react';
 import { toast } from 'sonner';
 import { ORDER_STATUS_LABELS, ORDER_STATUS_VARIANTS } from '@/lib/constants';
-import { formatCurrency, formatDateShort } from '@/lib/format';
+import { formatDateShort } from '@/lib/format';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 
@@ -31,7 +30,7 @@ export function PatientOrdersPage() {
       setOrders(data.data);
       setTotal(data.pagination.total);
     } catch {
-      toast.error('Error al cargar pedidos');
+      toast.error('Error al cargar tus solicitudes');
     } finally {
       setIsLoading(false);
     }
@@ -45,10 +44,12 @@ export function PatientOrdersPage() {
 
   return (
     <div className="space-y-8 animate-fade-in">
-      <PageHeader title="Mis Pedidos">
+      <PageHeader title="Mis solicitudes" description="Solicitudes de dispensación a tu dispensario">
         <Select value={statusFilter} onValueChange={(v: string | null) => { setStatusFilter(v === 'all' || !v ? '' : v); setPage(1); }}>
           <SelectTrigger className="w-[200px] rounded-xl h-11">
-            <SelectValue placeholder="Estado" />
+            <SelectValue placeholder="Estado">
+              {(v: string) => (v ? ORDER_STATUS_LABELS[v as OrderStatus] ?? 'Todos' : 'Estado')}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos</SelectItem>
@@ -60,7 +61,7 @@ export function PatientOrdersPage() {
         <Link to="/portal/pedidos/nuevo">
           <Button>
             <Plus className="h-4 w-4 mr-2" />
-            Nuevo Pedido
+            Nueva solicitud
           </Button>
         </Link>
       </PageHeader>
@@ -78,15 +79,15 @@ export function PatientOrdersPage() {
       ) : orders.length === 0 ? (
         <Card>
           <CardContent className="py-14 text-center">
-            <ShoppingCart className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <p className="text-lg font-medium text-muted-foreground">No tienes pedidos aún</p>
+            <ClipboardList className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+            <p className="text-lg font-medium text-muted-foreground">Aún no tienes solicitudes</p>
             <p className="text-sm text-muted-foreground mt-1">
-              Realiza tu primer pedido desde el catálogo
+              Cuando tu cuenta esté activa y tengas receta vigente, puedes solicitar una dispensación
             </p>
             <Link to="/portal/pedidos/nuevo" className="mt-4 inline-block">
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
-                Nuevo Pedido
+                Nueva solicitud
               </Button>
             </Link>
           </CardContent>
@@ -108,7 +109,10 @@ export function PatientOrdersPage() {
                           <StatusBadge label={ORDER_STATUS_LABELS[order.estado]} variant={ORDER_STATUS_VARIANTS[order.estado]} />
                         </div>
                         <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                          <span>{order.items.length} {order.items.length === 1 ? 'producto' : 'productos'}</span>
+                          <span>
+                            {order.items.reduce((sum, i) => sum + i.cantidad, 0)} unidad(es) ·{' '}
+                            {order.items.length} {order.items.length === 1 ? 'producto' : 'productos'}
+                          </span>
                           <span>•</span>
                           <span className="capitalize">{order.tipoEntrega === 'retiro' ? 'Retiro' : 'Despacho'}</span>
                           <span>•</span>
@@ -117,17 +121,6 @@ export function PatientOrdersPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-3 sm:ml-auto">
-                      <span className="text-lg font-bold">{formatCurrency(order.total)}</span>
-                      {order.pago?.estado === 'aprobado' ? (
-                        <Badge className="bg-green-100 text-green-700 border-green-200 rounded-full text-xs">Pagado</Badge>
-                      ) : !['cancelado', 'entregado'].includes(order.estado) ? (
-                        <Link to={`/portal/pedidos/${order._id}`}>
-                          <Button size="sm" className="rounded-xl">
-                            <CreditCard className="h-4 w-4 mr-1" />
-                            Pagar
-                          </Button>
-                        </Link>
-                      ) : null}
                       <Link to={`/portal/pedidos/${order._id}`}>
                         <Button variant="outline" size="sm" className="rounded-xl">
                           <Eye className="h-4 w-4 mr-2" />
@@ -143,7 +136,7 @@ export function PatientOrdersPage() {
 
           {totalPages > 1 && (
             <div className="flex justify-between items-center pt-2">
-              <p className="text-sm text-muted-foreground">Total: {total} pedidos</p>
+              <p className="text-sm text-muted-foreground">Total: {total} solicitudes</p>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" className="rounded-xl" disabled={page <= 1} onClick={() => setPage(page - 1)}>
                   Anterior

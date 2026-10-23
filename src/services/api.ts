@@ -4,6 +4,8 @@ import type {
   User,
   Patient,
   Product,
+  Sucursal,
+  SucursalStock,
   Order,
   InventoryMovement,
   Production,
@@ -11,29 +13,44 @@ import type {
   PaginatedResponse,
   DashboardData,
   AuditLog,
+  AppConfig,
+  VigenciaAlerts,
+  PatientExpediente,
+  PatientDocument,
+  Ubicacion,
+  EspacioCultivo,
+  Cosecha,
+  Transferencia,
+  LotTraceability,
 } from '@/types';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+
 const api = axios.create({
-  baseURL: 'https://dispensapp-backend-production-9a9a.up.railway.app/api',
+  baseURL: API_BASE,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Interceptor to add token
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  const sucursalId = localStorage.getItem('sucursalActiva');
+  if (sucursalId) {
+    config.headers['X-Sucursal-Id'] = sucursalId;
+  }
   return config;
 });
 
-// Interceptor to handle 401
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    // En /auth/login un 401 es "credenciales inválidas": no se redirige.
+    const isLogin = String(error.config?.url || '').includes('/auth/login');
+    if (error.response?.status === 401 && !isLogin) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
@@ -42,18 +59,45 @@ api.interceptors.response.use(
   }
 );
 
-// Auth
+/** Mensaje de error de la API (message o primer error de validación). */
+export function apiErrorMessage(err: unknown, fallback = 'Ocurrió un error'): string {
+  const e = err as { response?: { data?: { message?: string; errors?: { msg?: string }[] } } };
+  return e.response?.data?.message || e.response?.data?.errors?.[0]?.msg || fallback;
+}
+
+type UrlResponse = { url: string };
+
+export const configAPI = {
+  get: () => api.get<AppConfig>('/config'),
+};
+
 export const authAPI = {
   login: (data: { email: string; password: string }) =>
     api.post<AuthResponse>('/auth/login', data),
-  register: (data: Record<string, string>) =>
-    api.post<AuthResponse>('/auth/register', data),
+  /** Crea un usuario interno. Requiere sesión de admin; no devuelve token. */
+  register: (data: Record<string, unknown>) =>
+    api.post<{ user: AuthResponse['user'] }>('/auth/register', data),
   me: () => api.get<{ user: User }>('/auth/me'),
   registerPatient: (data: Record<string, unknown>) =>
     api.post<AuthResponse>('/auth/register-patient', data),
+  setSucursalActiva: (sucursalId: string) =>
+    api.patch<{ user: User }>('/auth/sucursal-activa', { sucursalId }),
 };
 
-// Patients
+export const sucursalesAPI = {
+  list: (params?: Record<string, string>) =>
+    api.get<Sucursal[]>('/sucursales', { params }),
+  /** Lista mínima sin login, para el registro de pacientes. */
+  publicas: () =>
+    api.get<Pick<Sucursal, '_id' | 'nombre' | 'codigo' | 'direccion'>[]>('/sucursales/publicas'),
+  get: (id: string) => api.get<Sucursal>(`/sucursales/${id}`),
+  create: (data: Partial<Sucursal>) => api.post<Sucursal>('/sucursales', data),
+  update: (id: string, data: Partial<Sucursal>) =>
+    api.put<Sucursal>(`/sucursales/${id}`, data),
+  toggleActive: (id: string) =>
+    api.patch<Sucursal>(`/sucursales/${id}/toggle-active`),
+};
+
 export const patientsAPI = {
   list: (params?: Record<string, string>) =>
     api.get<PaginatedResponse<Patient>>('/patients', { params }),
@@ -61,15 +105,35 @@ export const patientsAPI = {
   create: (data: Partial<Patient>) => api.post<Patient>('/patients', data),
   update: (id: string, data: Partial<Patient>) =>
     api.put<Patient>(`/patients/${id}`, data),
-  updateStatus: (id: string, data: { estado: string; observaciones?: string }) =>
+  updateStatus: (id: string, data: { estado: string; motivo?: string; observaciones?: string }) =>
     api.patch<Patient>(`/patients/${id}/status`, data),
+  assignSucursal: (id: string, sucursal: string) =>
+    api.patch<Patient>(`/patients/${id}/sucursal`, { sucursal }),
   uploadDocument: (id: string, formData: FormData) =>
     api.post<Patient>(`/patients/${id}/documents`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+  reviewDocument: (
+    id: string,
+    docId: string,
+    data: { estado: 'aprobado' | 'rechazado'; observaciones?: string; fechaVencimiento?: string }
+  ) => api.patch<Patient & { reactivado?: boolean }>(`/patients/${id}/documents/${docId}/review`, data),
+  /** Enlace temporal (5 min) para ver el documento. Queda auditado. */
+  documentUrl: (id: string, docId: string, firmado = false) =>
+    api.get<UrlResponse>(`/patients/${id}/documents/${docId}/archivo`, {
+      params: firmado ? { firmado: 'true' } : undefined,
+    }),
+  requestSignature: (
+    id: string,
+    docId: string,
+    data: { signerName?: string; signerEmail?: string; signerRut?: string; message?: string } = {}
+  ) => api.post<{ documento: PatientDocument }>(`/signatures/patients/${id}/documents/${docId}/sign`, data),
+  signatureStatus: (id: string, docId: string) =>
+    api.get<{ documento: PatientDocument }>(`/signatures/patients/${id}/documents/${docId}/status`),
+  expediente: (id: string) => api.get<PatientExpediente>(`/patients/${id}/expediente`),
+  alertasVigencia: () => api.get<VigenciaAlerts>('/patients/alertas/vigencia'),
 };
 
-// Products
 export const productsAPI = {
   list: (params?: Record<string, string>) =>
     api.get<PaginatedResponse<Product>>('/products', { params }),
@@ -82,9 +146,16 @@ export const productsAPI = {
     api.post<Product>(`/products/${id}/image`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+  listStock: (params?: Record<string, string>) =>
+    api.get<PaginatedResponse<SucursalStock>>('/products/stock', { params }),
+  /** Ingresa stock (queda como movimiento de ingreso). Acepta `ubicacion`. */
+  createStock: (data: Record<string, unknown>) =>
+    api.post<SucursalStock>('/products/stock', data),
+  /** Solo precioLocal, fechas y activo. Las cantidades se cambian con movimientos. */
+  updateStock: (id: string, data: Record<string, unknown>) =>
+    api.put<SucursalStock>(`/products/stock/${id}`, data),
 };
 
-// Orders
 export const ordersAPI = {
   list: (params?: Record<string, string>) =>
     api.get<PaginatedResponse<Order>>('/orders', { params }),
@@ -92,9 +163,17 @@ export const ordersAPI = {
   create: (data: Record<string, unknown>) => api.post<Order>('/orders', data),
   updateStatus: (id: string, data: { estado: string; observacion?: string }) =>
     api.patch<Order>(`/orders/${id}/status`, data),
+  uploadDocument: (orderId: string, formData: FormData) =>
+    api.post<Order>(`/signatures/orders/${orderId}/documents`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  documentUrl: (orderId: string, docId: string, firmado = false) =>
+    api.get<UrlResponse>(`/signatures/orders/${orderId}/documents/${docId}/archivo`, {
+      params: firmado ? { firmado: 'true' } : undefined,
+    }),
 };
 
-// Payments (POS + Flow.cl)
+/** Solo funciona si el backend tiene PAGOS_HABILITADOS=true. */
 export const paymentsAPI = {
   providers: () => api.get<{ providers: string[] }>('/payments/providers'),
   initiate: (orderId: string, data: { method: 'debito' | 'credito'; installments?: number }) =>
@@ -111,39 +190,97 @@ export const paymentsAPI = {
     api.get(`/payments/orders/${orderId}/flow-status`),
 };
 
-// Signatures (Firma Electrónica)
-export const signaturesAPI = {
-  providers: () => api.get<{ providers: string[] }>('/signatures/providers'),
-  uploadDocument: (orderId: string, formData: FormData) =>
-    api.post<Order>(`/signatures/orders/${orderId}/documents`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
-  listDocuments: (orderId: string) =>
-    api.get(`/signatures/orders/${orderId}/documents`),
-  requestSignature: (orderId: string, docId: string, data: { signerName: string; signerEmail: string; signerRut?: string; message?: string }) =>
-    api.post(`/signatures/orders/${orderId}/documents/${docId}/sign`, data),
-  signatureStatus: (orderId: string, docId: string) =>
-    api.get(`/signatures/orders/${orderId}/documents/${docId}/status`),
-};
-
-// Inventory
 export const inventoryAPI = {
   movements: (params?: Record<string, string>) =>
     api.get<PaginatedResponse<InventoryMovement>>('/inventory/movements', { params }),
+  /**
+   * Ingreso, ajuste o merma. Enviar `stock` (fila) o, para un ingreso nuevo, `producto` + `lote` (+ `ubicacion`).
+   * Los traslados se hacen con transferenciasAPI.
+   */
   createMovement: (data: Record<string, unknown>) =>
     api.post<InventoryMovement>('/inventory/movements', data),
-  stock: () => api.get<Product[]>('/inventory/stock'),
-  traceability: (lote: string) =>
-    api.get<{ lote: string; producto: Product; movimientos: InventoryMovement[] }>(
-      `/inventory/traceability/${lote}`
-    ),
+  /** Filtros: ubicacion (id o "ninguna"), producto, conStock=true */
+  stock: (params?: Record<string, string>) => api.get<SucursalStock[]>('/inventory/stock', { params }),
+  stockPorUbicacion: () =>
+    api.get<
+      {
+        sucursal: string;
+        ubicacion: { _id: string; nombre: string; codigo: string; tipo: string } | null;
+        disponible: number;
+        reservado: number;
+        cantidadLotes: number;
+        cantidadProductos: number;
+      }[]
+    >('/inventory/stock/por-ubicacion'),
+  traceability: (lote: string) => api.get<LotTraceability>(`/inventory/traceability/${encodeURIComponent(lote)}`),
 };
 
-// Production
+export const ubicacionesAPI = {
+  list: (params?: Record<string, string>) => api.get<Ubicacion[]>('/ubicaciones', { params }),
+  get: (id: string) =>
+    api.get<{ ubicacion: Ubicacion; stock: SucursalStock[]; espacios: EspacioCultivo[] }>(`/ubicaciones/${id}`),
+  create: (data: Partial<Ubicacion>) => api.post<Ubicacion>('/ubicaciones', data),
+  update: (id: string, data: Partial<Ubicacion>) => api.put<Ubicacion>(`/ubicaciones/${id}`, data),
+  toggleActive: (id: string) => api.patch<Ubicacion>(`/ubicaciones/${id}/toggle-active`),
+};
+
+export const cultivoAPI = {
+  espacios: (params?: Record<string, string>) => api.get<EspacioCultivo[]>('/cultivo/espacios', { params }),
+  espacio: (id: string) => api.get<{ espacio: EspacioCultivo; cosechas: Cosecha[] }>(`/cultivo/espacios/${id}`),
+  crearEspacio: (data: {
+    paciente: string;
+    ubicacion: string;
+    metrosCuadrados: number;
+    flor: string;
+    fechaInicio?: string;
+    observaciones?: string;
+  }) => api.post<EspacioCultivo>('/cultivo/espacios', data),
+  actualizarEspacio: (id: string, data: Partial<Pick<EspacioCultivo, 'flor' | 'metrosCuadrados' | 'observaciones'>> & { ubicacion?: string }) =>
+    api.put<EspacioCultivo>(`/cultivo/espacios/${id}`, data),
+  cerrarEspacio: (id: string, observaciones?: string) =>
+    api.patch<EspacioCultivo>(`/cultivo/espacios/${id}/cerrar`, { observaciones }),
+  regenerarQR: (id: string) => api.post<EspacioCultivo>(`/cultivo/espacios/${id}/regenerar-qr`),
+  /** Lo que se abre al escanear el QR. */
+  porQR: (codigoQR: string) =>
+    api.get<{ espacio: EspacioCultivo; cosechas: Cosecha[] }>(`/cultivo/qr/${encodeURIComponent(codigoQR)}`),
+  cosechas: (params?: Record<string, string>) => api.get<Cosecha[]>('/cultivo/cosechas', { params }),
+  registrarCosecha: (
+    espacioId: string,
+    data: {
+      fecha?: string;
+      pesoHumedo?: number;
+      pesoSeco?: number;
+      observaciones?: string;
+      ingreso?: { producto: string; cantidad: number; ubicacion?: string; fechaVencimiento?: string };
+    }
+  ) => api.post<Cosecha>(`/cultivo/espacios/${espacioId}/cosechas`, data),
+  ingresarCosecha: (
+    cosechaId: string,
+    data: { producto: string; cantidad: number; ubicacion?: string; fechaVencimiento?: string }
+  ) => api.post<Cosecha>(`/cultivo/cosechas/${cosechaId}/ingresar`, data),
+};
+
+export const transferenciasAPI = {
+  list: (params?: Record<string, string>) =>
+    api.get<PaginatedResponse<Transferencia>>('/transferencias', { params }),
+  get: (id: string) => api.get<Transferencia>(`/transferencias/${id}`),
+  /** Envía desde la sucursal activa. Todos los ítems deben salir de la misma ubicación. */
+  enviar: (data: {
+    items: { stock: string; cantidad: number }[];
+    sucursalDestino?: string;
+    ubicacionDestino?: string;
+    observaciones?: string;
+  }) => api.post<Transferencia>('/transferencias', data),
+  recibir: (id: string, observaciones?: string) =>
+    api.patch<Transferencia>(`/transferencias/${id}/recibir`, { observaciones }),
+  anular: (id: string, motivo?: string) => api.patch<Transferencia>(`/transferencias/${id}/anular`, { motivo }),
+};
+
 export const productionAPI = {
   list: (params?: Record<string, string>) =>
     api.get<PaginatedResponse<Production>>('/production', { params }),
   get: (id: string) => api.get<Production>(`/production/${id}`),
+  /** Acepta `cosecha` y `ubicacionDestino` opcionales. */
   create: (data: Record<string, unknown>) => api.post<Production>('/production', data),
   complete: (id: string, data: { cantidadProducida: number }) =>
     api.patch<Production>(`/production/${id}/complete`, data),
@@ -151,7 +288,6 @@ export const productionAPI = {
     api.post<Production>(`/production/${id}/waste`, data),
 };
 
-// Finance
 export const financeAPI = {
   transactions: (params?: Record<string, string>) =>
     api.get<PaginatedResponse<FinanceTransaction>>('/finance/transactions', { params }),
@@ -168,7 +304,6 @@ export const financeAPI = {
     api.get('/finance/cashflow', { params }),
 };
 
-// Users
 export const usersAPI = {
   list: (params?: Record<string, string>) =>
     api.get<PaginatedResponse<User>>('/users', { params }),
@@ -176,23 +311,29 @@ export const usersAPI = {
     api.put<User>(`/users/${id}`, data),
   toggleActive: (id: string) =>
     api.patch<User>(`/users/${id}/toggle-active`),
+  /** Quita el bloqueo por intentos fallidos de login. */
+  unlock: (id: string) => api.patch<User>(`/users/${id}/desbloquear`),
 };
 
-// Reports
 export const reportsAPI = {
   dashboard: () => api.get<DashboardData>('/reports/dashboard'),
   sales: (params?: Record<string, string>) =>
     api.get('/reports/sales', { params }),
   production: () => api.get('/reports/production'),
+  /** Detalle de dispensaciones (una fila por lote), para fiscalización. */
+  dispensaciones: (params?: Record<string, string>) =>
+    api.get<{ total: number; data: Record<string, string | number>[] }>('/reports/dispensaciones', { params }),
+  /** Descarga el CSV de dispensaciones. */
+  dispensacionesCSV: (params?: Record<string, string>) =>
+    api.get<Blob>('/reports/dispensaciones', { params: { ...params, formato: 'csv' }, responseType: 'blob' }),
 };
 
-// Audit
 export const auditAPI = {
+  /** Filtros: usuario, entidad, entidadId, accion, resultado, desde, hasta, page, limit */
   list: (params?: Record<string, string>) =>
     api.get<PaginatedResponse<AuditLog>>('/audit', { params }),
 };
 
-// Patient Portal
 export const patientPortalAPI = {
   getProfile: () => api.get<Patient>('/patients/me'),
   updateProfile: (data: Record<string, unknown>) => api.put<Patient>('/patients/me', data),
@@ -200,24 +341,62 @@ export const patientPortalAPI = {
     api.post<Patient>('/patients/me/documents', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+  documentUrl: (docId: string, firmado = false) =>
+    api.get<UrlResponse>(`/patients/me/documents/${docId}/archivo`, {
+      params: firmado ? { firmado: 'true' } : undefined,
+    }),
+  /** El paciente pide firmar electrónicamente su documento (reglamento o mandato). */
+  requestSignature: (docId: string) =>
+    api.post<{ paciente: Patient; firma: { signingUrl?: string; message: string } }>(
+      `/patients/me/documents/${docId}/firmar`
+    ),
+  signatureStatus: (docId: string) =>
+    api.get<{ documento: PatientDocument }>(`/patients/me/documents/${docId}/firma`),
   getCatalog: (params?: Record<string, string>) =>
-    api.get<PaginatedResponse<Product>>('/products/catalog', { params }),
+    api.get<PaginatedResponse<SucursalStock>>('/products/catalog', { params }),
   getMyOrders: (params?: Record<string, string>) =>
     api.get<PaginatedResponse<Order>>('/orders/patient', { params }),
   getMyOrder: (id: string) => api.get<Order>(`/orders/patient/${id}`),
   createOrder: (data: Record<string, unknown>) => api.post<Order>('/orders/patient', data),
   cancelOrder: (id: string) => api.patch<Order>(`/orders/patient/${id}/cancel`),
+  /** Solo con pagos habilitados. */
   payOrder: (orderId: string) =>
     api.post<{ order: Order; redirectUrl: string; flowToken: string }>(`/payments/orders/${orderId}/patient-pay`),
 };
 
 export default api;
 
-// Helper: construye la URL completa de una imagen de producto
-const API_ORIGIN = 'https://dispensapp-backend-production-9a9a.up.railway.app';
+/** Origen del backend (sin /api), para imágenes públicas. */
+export const API_ORIGIN = API_BASE.replace(/\/api\/?$/, '');
 
 export function getProductImageUrl(imagen: string | undefined): string | null {
   if (!imagen) return null;
   if (imagen.startsWith('http')) return imagen; // URL de S3
   return `${API_ORIGIN}${imagen}`; // Ruta local servida por el backend
+}
+
+/**
+ * Abre un documento privado: pide el enlace temporal y lo abre en otra pestaña.
+ * La pestaña se abre antes de la llamada para que el navegador no la bloquee.
+ */
+export async function openDocument(getUrl: () => Promise<{ data: UrlResponse }>): Promise<void> {
+  const win = window.open('', '_blank');
+  try {
+    const { data } = await getUrl();
+    if (win) win.location.href = data.url;
+    else window.location.href = data.url;
+  } catch (err) {
+    win?.close();
+    throw err;
+  }
+}
+
+/** Descarga un Blob como archivo. */
+export function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
