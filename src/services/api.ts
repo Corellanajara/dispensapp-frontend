@@ -22,6 +22,9 @@ import type {
   Cosecha,
   Transferencia,
   LotTraceability,
+  CertificateStatus,
+  SignatureAdminConfig,
+  SignatureSettings,
 } from '@/types';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
@@ -59,6 +62,11 @@ api.interceptors.response.use(
   }
 );
 
+/** Código de error que devuelve la API de firma (ej. REQUIERE_CERTIFICADO). */
+export function apiErrorCode(err: unknown): string | undefined {
+  return (err as { response?: { data?: { codigo?: string } } }).response?.data?.codigo;
+}
+
 /** Mensaje de error de la API (message o primer error de validación). */
 export function apiErrorMessage(err: unknown, fallback = 'Ocurrió un error'): string {
   const e = err as { response?: { data?: { message?: string; errors?: { msg?: string }[] } } };
@@ -66,6 +74,41 @@ export function apiErrorMessage(err: unknown, fallback = 'Ocurrió un error'): s
 }
 
 type UrlResponse = { url: string };
+
+export interface SignatureRequestResult {
+  signatureId: string;
+  status: string;
+  /** Página del proveedor donde el paciente firma. */
+  signingUrl?: string;
+  message: string;
+}
+
+export interface CertificateRequestData {
+  /** Número de documento (serie) de la cédula. */
+  serieCedula: string;
+  telefono?: string;
+  comuna?: string;
+}
+
+export interface CertificateRequestResult {
+  /** Página del proveedor donde el paciente valida su identidad. */
+  enrollUrl: string;
+  message: string;
+}
+
+/** Firma electrónica: configuración del administrador y herramientas del proveedor. */
+export const signaturesAPI = {
+  getConfig: () => api.get<SignatureAdminConfig>('/signatures/config'),
+  updateConfig: (data: Partial<SignatureSettings>) => api.put<SignatureAdminConfig>('/signatures/config', data),
+  testConnection: () => api.post<{ ok: boolean; message: string }>('/signatures/proveedor/probar'),
+  getWebhook: () =>
+    api.get<{ actual: { url?: string; authType?: string } | null; esperado: string; coincide: boolean }>(
+      '/signatures/proveedor/webhook'
+    ),
+  registerWebhook: () => api.post<{ message: string; url: string }>('/signatures/proveedor/webhook'),
+  testWebhook: () => api.post<{ message: string }>('/signatures/proveedor/webhook/probar'),
+  comunas: () => api.get<{ comunas: string[] }>('/signatures/comunas'),
+};
 
 export const configAPI = {
   get: () => api.get<AppConfig>('/config'),
@@ -123,13 +166,19 @@ export const patientsAPI = {
     api.get<UrlResponse>(`/patients/${id}/documents/${docId}/archivo`, {
       params: firmado ? { firmado: 'true' } : undefined,
     }),
-  requestSignature: (
-    id: string,
-    docId: string,
-    data: { signerName?: string; signerEmail?: string; signerRut?: string; message?: string } = {}
-  ) => api.post<{ documento: PatientDocument }>(`/signatures/patients/${id}/documents/${docId}/sign`, data),
+  /** Envía el documento a firma del paciente. Con reiniciar=true cancela la firma en curso y crea otra. */
+  requestSignature: (id: string, docId: string, reiniciar = false) =>
+    api.post<{ documento: PatientDocument; firma: SignatureRequestResult }>(
+      `/signatures/patients/${id}/documents/${docId}/sign`,
+      { reiniciar }
+    ),
+  cancelSignature: (id: string, docId: string) =>
+    api.post<{ documento: PatientDocument }>(`/signatures/patients/${id}/documents/${docId}/cancel`),
   signatureStatus: (id: string, docId: string) =>
     api.get<{ documento: PatientDocument }>(`/signatures/patients/${id}/documents/${docId}/status`),
+  certificate: (id: string) => api.get<CertificateStatus>(`/signatures/patients/${id}/certificado`),
+  requestCertificate: (id: string, data: CertificateRequestData) =>
+    api.post<CertificateRequestResult>(`/signatures/patients/${id}/certificado`, data),
   expediente: (id: string) => api.get<PatientExpediente>(`/patients/${id}/expediente`),
   alertasVigencia: () => api.get<VigenciaAlerts>('/patients/alertas/vigencia'),
 };
@@ -345,11 +394,14 @@ export const patientPortalAPI = {
     api.get<UrlResponse>(`/patients/me/documents/${docId}/archivo`, {
       params: firmado ? { firmado: 'true' } : undefined,
     }),
-  /** El paciente pide firmar electrónicamente su documento (reglamento o mandato). */
-  requestSignature: (docId: string) =>
-    api.post<{ paciente: Patient; firma: { signingUrl?: string; message: string } }>(
-      `/patients/me/documents/${docId}/firmar`
-    ),
+  /** El paciente pide firmar electrónicamente su documento. */
+  requestSignature: (docId: string, reiniciar = false) =>
+    api.post<{ paciente: Patient; firma: SignatureRequestResult }>(`/patients/me/documents/${docId}/firmar`, {
+      reiniciar,
+    }),
+  certificate: () => api.get<CertificateStatus>('/patients/me/certificado-firma'),
+  requestCertificate: (data: CertificateRequestData) =>
+    api.post<CertificateRequestResult>('/patients/me/certificado-firma', data),
   signatureStatus: (docId: string) =>
     api.get<{ documento: PatientDocument }>(`/patients/me/documents/${docId}/firma`),
   getCatalog: (params?: Record<string, string>) =>

@@ -179,6 +179,7 @@ export const SIGNATURE_STATUS_LABELS: Record<SignatureStatus, string> = {
   firmado: 'Firmado',
   rechazado: 'Rechazado',
   expirado: 'Expirado',
+  cancelado: 'Cancelado',
   error: 'Error',
 };
 
@@ -188,6 +189,7 @@ export const SIGNATURE_STATUS_VARIANTS: Record<SignatureStatus, string> = {
   firmado: 'bg-success/15 text-success border-success/25',
   rechazado: 'bg-destructive/15 text-destructive border-destructive/25',
   expirado: 'bg-muted text-muted-foreground border-border',
+  cancelado: 'bg-muted text-muted-foreground border-border',
   error: 'bg-destructive/15 text-destructive border-destructive/25',
 };
 
@@ -271,6 +273,17 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   revisar_documento: 'Revisar documento',
   ver_documento: 'Ver documento',
   solicitar_firma: 'Solicitar firma',
+  cancelar_firma: 'Cancelar firma',
+  firma_firmado: 'Documento firmado',
+  firma_rechazado: 'Firma rechazada',
+  firma_cancelado: 'Firma cancelada',
+  firma_error: 'Error de firma',
+  solicitar_certificado_firma: 'Solicitar certificado de firma',
+  certificado_firma_emitido: 'Certificado de firma emitido',
+  certificado_firma_inactivo: 'Certificado de firma inactivo',
+  configurar_firma: 'Configurar firma electrónica',
+  configurar_webhook_firma: 'Registrar webhook de firma',
+  callback_firma_rechazado: 'Webhook de firma rechazado',
   exportar_expediente: 'Exportar expediente',
   exportar_reporte: 'Exportar reporte',
   consultar_reporte: 'Consultar reporte',

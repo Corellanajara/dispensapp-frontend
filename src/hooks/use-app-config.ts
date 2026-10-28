@@ -15,6 +15,14 @@ const DEFAULT_CONFIG: AppConfig = {
     cedula_identidad: 'Cédula de identidad',
     otro: 'Otro',
   },
+  firma: {
+    habilitada: false,
+    tiposConFirma: [],
+    proveedor: '',
+    ambiente: null,
+    requiereCertificado: false,
+    validezLegal: false,
+  },
 };
 
 /**
@@ -27,5 +35,7 @@ export function useAppConfig(): AppConfig & { isLoading: boolean } {
     queryFn: () => configAPI.get().then((r) => r.data),
     staleTime: 10 * 60_000,
   });
-  return { ...(data ?? DEFAULT_CONFIG), isLoading };
+  const config = data ?? DEFAULT_CONFIG;
+  // Por si el backend aún no envía "firma" (versión anterior).
+  return { ...config, firma: config.firma ?? DEFAULT_CONFIG.firma, isLoading };
 }

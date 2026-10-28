@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import type { DocumentRequirement, PatientDocument } from '@/types';
-import { patientPortalAPI, openDocument, apiErrorMessage } from '@/services/api';
+import type { CertificateStatus, DocumentRequirement, PatientDocument } from '@/types';
+import { patientPortalAPI, openDocument, apiErrorMessage, apiErrorCode } from '@/services/api';
+import { CertificadoDialog } from '@/components/firma/CertificadoDialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -58,7 +59,9 @@ export function DocumentRequirementCard({ requirement, doc, onChanged }: Documen
   const [showUpload, setShowUpload] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [fechaVencimiento, setFechaVencimiento] = useState('');
-  const [busy, setBusy] = useState<null | 'upload' | 'sign' | 'refresh' | 'view'>(null);
+  const [busy, setBusy] = useState<null | 'upload' | 'sign' | 'refresh' | 'view' | 'restart'>(null);
+  const [certOpen, setCertOpen] = useState(false);
+  const [certEstado, setCertEstado] = useState<CertificateStatus | null>(null);
 
   const estado = estadoDe(requirement, doc);
   const badge = BADGES[estado];
@@ -68,7 +71,7 @@ export function DocumentRequirementCard({ requirement, doc, onChanged }: Documen
     requirement.requiereFirma &&
     !!doc &&
     doc.estado !== 'rechazado' &&
-    (!firma || ['rechazado', 'expirado', 'error', 'pendiente'].includes(firma.estado));
+    (!firma || ['rechazado', 'expirado', 'cancelado', 'error', 'pendiente'].includes(firma.estado));
 
   const handleUpload = async () => {
     if (!file) {
@@ -99,15 +102,32 @@ export function DocumentRequirementCard({ requirement, doc, onChanged }: Documen
     }
   };
 
-  const handleSign = async () => {
+  /** Pide la firma y lleva al paciente a Signapis. Si aún no tiene firma electrónica, abre el paso previo. */
+  const handleSign = async (reiniciar = false) => {
     if (!doc) return;
-    setBusy('sign');
+    setBusy(reiniciar ? 'restart' : 'sign');
     try {
-      const { data } = await patientPortalAPI.requestSignature(doc._id);
+      const { data } = await patientPortalAPI.requestSignature(doc._id, reiniciar);
+      if (data.firma?.signingUrl) {
+        toast.success('Te llevamos a Signapis para firmar…');
+        window.location.assign(data.firma.signingUrl);
+        return;
+      }
       toast.success(data.firma?.message || 'Solicitud de firma enviada');
       onChanged();
     } catch (err) {
-      toast.error(apiErrorMessage(err, 'Error al solicitar la firma'));
+      const codigo = apiErrorCode(err);
+      if (codigo === 'REQUIERE_CERTIFICADO' || codigo === 'CERTIFICADO_EN_CURSO') {
+        try {
+          const { data } = await patientPortalAPI.certificate();
+          setCertEstado(data);
+        } catch {
+          setCertEstado(null);
+        }
+        setCertOpen(true);
+      } else {
+        toast.error(apiErrorMessage(err, 'Error al solicitar la firma'));
+      }
     } finally {
       setBusy(null);
     }
@@ -200,8 +220,15 @@ export function DocumentRequirementCard({ requirement, doc, onChanged }: Documen
                 {firma.fechaFirma ? ` el ${formatDate(firma.fechaFirma)}` : ''}
               </p>
             )}
-            {firma && ['rechazado', 'expirado', 'error'].includes(firma.estado) && (
-              <p className="text-xs text-destructive">La firma no se completó ({firma.estado}). Puedes intentarlo de nuevo.</p>
+            {firma && ['rechazado', 'expirado', 'cancelado', 'error'].includes(firma.estado) && (
+              <p className="text-xs text-destructive">
+                La firma no se completó{firma.mensaje ? `: ${firma.mensaje}` : ` (${firma.estado})`}. Puedes intentarlo de nuevo.
+              </p>
+            )}
+            {firma?.estado === 'enviado' && (
+              <p className="text-xs text-muted-foreground">
+                Firma en curso: entra a Signapis, revisa el documento y fírmalo con tu clave y el código que te llega.
+              </p>
             )}
           </div>
         </div>
@@ -225,7 +252,7 @@ export function DocumentRequirementCard({ requirement, doc, onChanged }: Documen
               </Button>
             )}
             {puedeFirmar && (
-              <Button size="sm" onClick={handleSign} disabled={busy === 'sign'}>
+              <Button size="sm" onClick={() => handleSign()} disabled={busy === 'sign'}>
                 {busy === 'sign' ? (
                   <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                 ) : (
@@ -237,16 +264,18 @@ export function DocumentRequirementCard({ requirement, doc, onChanged }: Documen
             {firma?.estado === 'enviado' && (
               <>
                 {firma.signingUrl && (
-                  <a href={firma.signingUrl} target="_blank" rel="noopener noreferrer">
-                    <Button size="sm">
-                      <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                      Abrir firma
-                    </Button>
-                  </a>
+                  <Button size="sm" onClick={() => window.location.assign(firma.signingUrl!)}>
+                    <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                    Continuar firma
+                  </Button>
                 )}
                 <Button size="sm" variant="outline" onClick={handleRefresh} disabled={busy === 'refresh'}>
                   <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${busy === 'refresh' ? 'animate-spin' : ''}`} />
                   Actualizar estado
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => handleSign(true)} disabled={busy === 'restart'}>
+                  {busy === 'restart' && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                  Nuevo enlace
                 </Button>
               </>
             )}
@@ -263,10 +292,10 @@ export function DocumentRequirementCard({ requirement, doc, onChanged }: Documen
       {showUpload && (
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-border/50 pt-4">
           <div className="space-y-1.5">
-            <Label className="text-xs">Archivo (PDF, JPG o PNG)</Label>
+            <Label className="text-xs">{requirement.requiereFirma ? 'Archivo (PDF)' : 'Archivo (PDF, JPG o PNG)'}</Label>
             <Input
               type="file"
-              accept=".pdf,.jpg,.jpeg,.png"
+              accept={requirement.requiereFirma ? '.pdf,application/pdf' : '.pdf,.jpg,.jpeg,.png'}
               onChange={(e) => setFile(e.target.files?.[0] || null)}
               className="rounded-xl"
             />
@@ -301,11 +330,19 @@ export function DocumentRequirementCard({ requirement, doc, onChanged }: Documen
           </div>
           {requirement.requiereFirma && (
             <p className="text-xs text-muted-foreground sm:col-span-2">
-              Después de subirlo, usa "Firmar electrónicamente" para completar este documento.
+              Súbelo en PDF. Después usa "Firmar electrónicamente" para completar este documento.
             </p>
           )}
         </div>
       )}
+
+      <CertificadoDialog
+        open={certOpen}
+        onOpenChange={setCertOpen}
+        estado={certEstado}
+        modo="paciente"
+        onSubmit={(data) => patientPortalAPI.requestCertificate(data).then((r) => r.data)}
+      />
     </div>
   );
 }

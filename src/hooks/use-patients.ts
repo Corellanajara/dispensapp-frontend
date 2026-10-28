@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { patientsAPI, cultivoAPI, apiErrorMessage } from '@/services/api';
+import { patientsAPI, cultivoAPI, apiErrorMessage, apiErrorCode } from '@/services/api';
 import type { Patient } from '@/types';
 import { toast } from 'sonner';
 
@@ -148,16 +148,48 @@ export function useReviewDocument() {
   });
 }
 
+/** Códigos que la pantalla resuelve abriendo el diálogo del certificado (no se muestran como error). */
+export const CODIGOS_CERTIFICADO = ['REQUIERE_CERTIFICADO', 'CERTIFICADO_EN_CURSO'];
+
 export function useRequestPatientSignature() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, docId }: { id: string; docId: string }) =>
-      patientsAPI.requestSignature(id, docId).then((r) => r.data),
+    mutationFn: ({ id, docId, reiniciar = false }: { id: string; docId: string; reiniciar?: boolean }) =>
+      patientsAPI.requestSignature(id, docId, reiniciar).then((r) => r.data),
     onSuccess: (_, { id }) => {
       qc.invalidateQueries({ queryKey: patientKeys.detail(id) });
-      toast.success('Documento enviado a firma');
     },
-    onError: (err) => toast.error(apiErrorMessage(err, 'Error al enviar a firma')),
+    onError: (err, { id }) => {
+      if (CODIGOS_CERTIFICADO.includes(apiErrorCode(err) ?? '')) {
+        qc.invalidateQueries({ queryKey: [...patientKeys.detail(id), 'certificado'] });
+        return;
+      }
+      toast.error(apiErrorMessage(err, 'Error al enviar a firma'));
+    },
+  });
+}
+
+export function useCancelSignature() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, docId }: { id: string; docId: string }) =>
+      patientsAPI.cancelSignature(id, docId).then((r) => r.data),
+    onSuccess: (_, { id }) => {
+      qc.invalidateQueries({ queryKey: patientKeys.detail(id) });
+      toast.success('Firma cancelada. Puedes enviarla de nuevo.');
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Error al cancelar la firma')),
+  });
+}
+
+/** Certificado de firma del paciente (consulta al proveedor). Solo si la firma está activa. */
+export function usePatientCertificate(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [...patientKeys.detail(id), 'certificado'],
+    queryFn: () => patientsAPI.certificate(id).then((r) => r.data),
+    enabled: enabled && !!id,
+    staleTime: 60_000,
+    retry: false,
   });
 }
 

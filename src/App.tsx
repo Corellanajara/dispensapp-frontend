@@ -33,6 +33,8 @@ import { QRScanPage } from '@/pages/QRScanPage';
 import { UbicacionesPage } from '@/pages/UbicacionesPage';
 import { TransferenciasPage } from '@/pages/TransferenciasPage';
 import { FiscalizacionPage } from '@/pages/FiscalizacionPage';
+import { FirmaConfigPage } from '@/pages/FirmaConfigPage';
+import { FirmaCompletadaPage } from '@/pages/FirmaCompletadaPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -62,6 +64,7 @@ function App() {
             <Routes>
               <Route path="/login" element={<AuthRedirect />} />
               <Route path="/registro-paciente" element={<PatientRegisterPage />} />
+              <Route path="/firma/completada" element={<FirmaCompletadaPage />} />
 
               {/* Admin/Staff Layout (sidebar) */}
               <Route
@@ -91,6 +94,7 @@ function App() {
                 <Route path="/usuarios" element={<ProtectedRoute roles={['admin']}><UsersPage /></ProtectedRoute>} />
                 <Route path="/sucursales" element={<ProtectedRoute roles={['admin']}><SucursalesPage /></ProtectedRoute>} />
                 <Route path="/auditoria" element={<ProtectedRoute roles={['admin']}><AuditPage /></ProtectedRoute>} />
+                <Route path="/configuracion/firma" element={<ProtectedRoute roles={['admin']}><FirmaConfigPage /></ProtectedRoute>} />
               </Route>
 
               {/* Patient Layout (top-nav) */}

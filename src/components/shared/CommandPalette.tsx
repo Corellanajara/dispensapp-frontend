@@ -26,6 +26,7 @@ import {
   FileSearch,
   ClipboardList,
   Building2,
+  PenTool,
 } from 'lucide-react';
 import type { UserRole } from '@/types';
 import type { LucideIcon } from 'lucide-react';
@@ -54,6 +55,7 @@ const routes: CommandRoute[] = [
   { title: 'Usuarios', url: '/usuarios', icon: Settings, roles: ['admin'], group: 'Administración' },
   { title: 'Sucursales', url: '/sucursales', icon: Building2, roles: ['admin'], group: 'Administración' },
   { title: 'Auditoría', url: '/auditoria', icon: Shield, roles: ['admin'], group: 'Administración' },
+  { title: 'Firma electrónica', url: '/configuracion/firma', icon: PenTool, roles: ['admin'], group: 'Administración' },
   // Patient routes
   { title: 'Mi Panel', url: '/portal', icon: LayoutDashboard, roles: ['paciente'], group: 'Portal' },
   { title: 'Productos disponibles', url: '/portal/catalogo', icon: Package, roles: ['paciente'], group: 'Portal' },

@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { patientPortalAPI, openDocument, apiErrorMessage } from '@/services/api';
 import type { DocumentType, Patient, PatientDocument } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -97,6 +98,31 @@ export function PatientProfilePage() {
     fetchProfile();
   }, [fetchProfile]);
 
+  // Vuelta desde Signapis: ?firma=listo (después de firmar) o ?certificado=listo (después de validar identidad).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const retornoProcesado = useRef(false);
+  useEffect(() => {
+    const firma = searchParams.get('firma');
+    const certificado = searchParams.get('certificado');
+    if (!patient || retornoProcesado.current || (!firma && !certificado)) return;
+    retornoProcesado.current = true;
+    setSearchParams({}, { replace: true });
+
+    if (certificado) {
+      toast.success('Identidad validada. Cuando Signapis confirme tu firma electrónica podrás firmar tus documentos.');
+      return;
+    }
+    const enCurso = (patient.documentos ?? []).filter((d) => d.firma?.estado === 'enviado');
+    Promise.allSettled(enCurso.map((d) => patientPortalAPI.signatureStatus(d._id))).then(async (r) => {
+      const firmados = r.filter(
+        (x) => x.status === 'fulfilled' && x.value.data.documento.firma?.estado === 'firmado'
+      ).length;
+      if (firmados > 0) toast.success(firmados === 1 ? 'Documento firmado' : `${firmados} documentos firmados`);
+      else toast.info('Recibimos tu firma. Puede tardar unos segundos en aparecer.');
+      await fetchProfile();
+    });
+  }, [patient, searchParams, setSearchParams, fetchProfile]);
+
   const saveProfile = async (data: Record<string, unknown>, done: () => void, msg: string) => {
     setIsSaving(true);
     try {
@@ -167,6 +193,7 @@ export function PatientProfilePage() {
   }
 
   const requeridos = config.documentosRequeridos;
+  const firmables = requeridos.filter((r) => r.requiereFirma).map((r) => r.label);
   const tiposRequeridos = new Set(requeridos.map((r) => r.tipo));
   const requisitos = patient.requisitosActivacion;
   const faltantes = [...(requisitos?.bloqueantes ?? []), ...(requisitos?.advertencias ?? [])];
@@ -262,7 +289,8 @@ export function PatientProfilePage() {
             )}
           </div>
           <p className="text-sm text-muted-foreground mt-1">
-            Sube cada documento. El reglamento interno y el mandato o contrato se firman electrónicamente. El
+            Sube cada documento.
+            {firmables.length > 0 && ` ${firmables.join(' y ')} se firman electrónicamente con Signapis.`} El
             administrador del dispensario revisa y aprueba cada uno.
           </p>
           {faltantes.length > 0 ? (

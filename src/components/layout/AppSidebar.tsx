@@ -30,6 +30,7 @@ import {
   ArrowLeftRight,
   FileSearch,
   ClipboardList,
+  PenTool,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -82,6 +83,7 @@ const navGroups: NavGroup[] = [
       { title: 'Finanzas', url: '/finanzas', icon: DollarSign, roles: ['admin', 'finanzas'] },
       { title: 'Usuarios', url: '/usuarios', icon: Settings, roles: ['admin'] },
       { title: 'Sucursales', url: '/sucursales', icon: Building2, roles: ['admin'] },
+      { title: 'Firma electrónica', url: '/configuracion/firma', icon: PenTool, roles: ['admin'] },
       { title: 'Auditoría', url: '/auditoria', icon: Shield, roles: ['admin'] },
     ],
   },

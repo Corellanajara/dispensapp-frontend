@@ -107,6 +107,29 @@ export interface DocumentSignature {
   fechaFirma?: string;
   archivoFirmado?: string;
   fechaSolicitud?: string;
+  /** Último mensaje del proveedor (ej. motivo de rechazo). */
+  mensaje?: string;
+  fechaActualizacion?: string;
+}
+
+/** Certificado de firma electrónica avanzada del paciente (Signapis lo exige para firmar). */
+export interface SignerCertificate {
+  proveedor: string;
+  estado: 'enrolando' | 'activo' | 'fallido';
+  numeroSerie?: string;
+  email?: string;
+  enrolamientoUrl?: string;
+  mensaje?: string;
+  fechaSolicitud?: string;
+  fechaEmision?: string;
+}
+
+export interface CertificateStatus {
+  requiere: boolean;
+  estado: 'no_aplica' | 'activo' | 'enrolando' | 'falta' | 'fallido';
+  mensaje?: string;
+  enrolamientoUrl?: string;
+  datos: { comuna: string | null; telefono: string | null; email: string };
 }
 
 export interface PatientDocument {
@@ -170,6 +193,7 @@ export interface Patient {
   /** Unidades que puede retirar en 30 días. 0 = sin límite. */
   limiteMensualUnidades: number;
   observaciones?: string;
+  certificadoFirma?: SignerCertificate;
   /** Calculado por la API. */
   recetaVigente?: { _id: string; fechaVencimiento: string } | null;
   /** Calculado por la API. */
@@ -216,7 +240,7 @@ export type OrderStatus =
 export type DeliveryType = 'retiro' | 'despacho';
 
 export type PaymentStatus = 'pendiente' | 'procesando' | 'aprobado' | 'rechazado' | 'cancelado' | 'error';
-export type SignatureStatus = 'pendiente' | 'enviado' | 'firmado' | 'rechazado' | 'expirado' | 'error';
+export type SignatureStatus = 'pendiente' | 'enviado' | 'firmado' | 'rechazado' | 'expirado' | 'cancelado' | 'error';
 
 /** Lote y ubicación desde donde se descontó un ítem. */
 export interface OrderItemLot {
@@ -596,6 +620,45 @@ export interface AppConfig {
   diasAvisoReceta: number;
   documentosRequeridos: DocumentRequirement[];
   tiposDocumento: Record<DocumentType, string>;
+  firma: {
+    /** Lo decide el administrador en Firma electrónica. */
+    habilitada: boolean;
+    tiposConFirma: DocumentType[];
+    proveedor: string;
+    ambiente: 'pruebas' | 'produccion' | null;
+    requiereCertificado: boolean;
+    validezLegal: boolean;
+  };
+}
+
+// Configuración de firma (administrador)
+export interface SignatureSettings {
+  habilitada: boolean;
+  tiposConFirma: DocumentType[];
+  tipoEstampa: 1 | 2 | 5;
+  textoEstampa?: string;
+  conQR: boolean;
+  posicion?: { pagina: number; x: number; y: number } | null;
+  vigenciaCertificadoAnios: 1 | 2 | 3;
+}
+
+export interface SignatureProviderInfo {
+  name: string;
+  configurado: boolean;
+  faltantes: string[];
+  ambiente?: 'pruebas' | 'produccion';
+  baseUrl?: string;
+  requiereCertificado: boolean;
+  validezLegal: boolean;
+}
+
+export interface SignatureAdminConfig {
+  firma: SignatureSettings;
+  proveedor: SignatureProviderInfo;
+  webhookUrl: string;
+  produccion: boolean;
+  /** Dónde se guardan los PDF y si sobreviven a un deploy. */
+  almacenamiento: { tipo: 's3' | 'volumen' | 'local'; persistente: boolean; detalle: string };
 }
 
 // Audit

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { DocumentType, Patient, PatientDocument } from '@/types';
+import type { CertificateStatus, DocumentType, Patient, PatientDocument } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,20 +16,35 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { CertificadoDialog } from '@/components/firma/CertificadoDialog';
+import { EnlaceFirmaDialog } from '@/components/firma/EnlaceFirmaDialog';
+import {
   CheckCircle2,
   Circle,
   Eye,
   FileCheck2,
   FileText,
+  Link2,
   PenTool,
   RefreshCw,
+  ShieldCheck,
   ThumbsDown,
   ThumbsUp,
   Upload,
   AlertTriangle,
+  XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { patientsAPI, openDocument, apiErrorMessage } from '@/services/api';
+import { patientsAPI, openDocument, apiErrorMessage, apiErrorCode } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppConfig } from '@/hooks/use-app-config';
 import {
@@ -37,6 +52,9 @@ import {
   useUploadPatientDocument,
   useRequestPatientSignature,
   useRefreshSignature,
+  useCancelSignature,
+  usePatientCertificate,
+  CODIGOS_CERTIFICADO,
 } from '@/hooks/use-patients';
 import {
   DOCUMENT_TYPE_LABELS,
@@ -59,13 +77,41 @@ function ver(patientId: string, docId: string, firmado = false) {
 export function DocumentsPanel({ patient }: { patient: Patient }) {
   const { hasRole } = useAuth();
   const isAdmin = hasRole('admin');
-  const { documentosRequeridos } = useAppConfig();
+  const { documentosRequeridos, firma: firmaCfg } = useAppConfig();
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadTipo, setUploadTipo] = useState<DocumentType | ''>('');
   const [review, setReview] = useState<{ doc: PatientDocument; estado: 'aprobado' | 'rechazado' } | null>(null);
+  const [certOpen, setCertOpen] = useState(false);
+  const [enlace, setEnlace] = useState<{ url: string; tipo: 'firma' | 'certificado' } | null>(null);
+  const [cancelar, setCancelar] = useState<PatientDocument | null>(null);
 
   const requestSignature = useRequestPatientSignature();
   const refreshSignature = useRefreshSignature();
+  const cancelSignature = useCancelSignature();
+
+  const firmaActiva = firmaCfg.habilitada && firmaCfg.tiposConFirma.length > 0;
+  const usaCertificado = firmaActiva && firmaCfg.requiereCertificado;
+  const certificado = usePatientCertificate(patient._id, usaCertificado);
+
+  const enviarAFirma = (doc: PatientDocument, reiniciar = false) =>
+    requestSignature.mutate(
+      { id: patient._id, docId: doc._id, reiniciar },
+      {
+        onSuccess: (data) => {
+          if (data.firma.signingUrl) {
+            setEnlace({ url: data.firma.signingUrl, tipo: 'firma' });
+          } else {
+            toast.success(data.firma.message || 'Documento enviado a firma');
+          }
+        },
+        onError: (err) => {
+          if (CODIGOS_CERTIFICADO.includes(apiErrorCode(err) ?? '')) {
+            toast.info(apiErrorMessage(err, 'El paciente necesita un certificado de firma'));
+            setCertOpen(true);
+          }
+        },
+      }
+    );
 
   const docs = [...(patient.documentos ?? [])].sort(
     (a, b) => new Date(b.fechaSubida).getTime() - new Date(a.fechaSubida).getTime()
@@ -78,6 +124,19 @@ export function DocumentsPanel({ patient }: { patient: Patient }) {
 
   return (
     <div className="space-y-5">
+      {firmaActiva && (
+        <FirmaCard
+          proveedorDePrueba={!firmaCfg.validezLegal}
+          ambiente={firmaCfg.ambiente}
+          usaCertificado={usaCertificado}
+          certificado={certificado.data}
+          cargando={certificado.isLoading}
+          error={certificado.error ? apiErrorMessage(certificado.error, 'No se pudo consultar el certificado') : null}
+          onObtener={() => setCertOpen(true)}
+          onVerEnlace={(url) => setEnlace({ url, tipo: 'certificado' })}
+          onActualizar={() => certificado.refetch()}
+        />
+      )}
       {documentosRequeridos.length > 0 && (
         <Card>
           <CardHeader>
@@ -131,10 +190,11 @@ export function DocumentsPanel({ patient }: { patient: Patient }) {
           ) : (
             <div className="space-y-3">
               {docs.map((doc) => {
-                const req = documentosRequeridos.find((r) => r.tipo === doc.tipo);
-                const firmable = !!req?.requiereFirma;
+                const firmable = firmaCfg.habilitada && firmaCfg.tiposConFirma.includes(doc.tipo);
                 const firmaEstado = doc.firma?.estado;
-                const puedeEnviarFirma = firmable && firmaEstado !== 'enviado' && firmaEstado !== 'firmado';
+                const puedeEnviarFirma =
+                  firmable && doc.estado !== 'rechazado' && firmaEstado !== 'enviado' && firmaEstado !== 'firmado';
+                const mostrarFirma = firmable || !!doc.firma;
                 const dias = doc.tipo === 'receta_medica' ? daysUntil(doc.fechaVencimiento) : null;
                 return (
                   <div key={doc._id} className="rounded-lg border p-3 space-y-3">
@@ -160,6 +220,16 @@ export function DocumentsPanel({ patient }: { patient: Patient }) {
                             </p>
                           )}
                           {doc.observaciones && <p className="text-xs italic text-muted-foreground">“{doc.observaciones}”</p>}
+                          {firmaEstado === 'firmado' && (
+                            <p className="text-xs text-success">
+                              Firmado{doc.firma?.firmadoPor ? ` por ${doc.firma.firmadoPor}` : ''}
+                              {doc.firma?.rutFirmante ? ` (${doc.firma.rutFirmante})` : ''}
+                              {doc.firma?.fechaFirma ? ` el ${formatDate(doc.firma.fechaFirma)}` : ''}
+                            </p>
+                          )}
+                          {doc.firma?.mensaje && firmaEstado && ['rechazado', 'error', 'cancelado', 'expirado'].includes(firmaEstado) && (
+                            <p className="text-xs text-destructive">{doc.firma.mensaje}</p>
+                          )}
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5 sm:justify-end shrink-0">
@@ -167,7 +237,7 @@ export function DocumentsPanel({ patient }: { patient: Patient }) {
                           label={DOCUMENT_STATUS_LABELS[doc.estado] || doc.estado}
                           variant={DOCUMENT_STATUS_VARIANTS[doc.estado] || ''}
                         />
-                        {firmable && (
+                        {mostrarFirma && (
                           <StatusBadge
                             label={firmaEstado ? `Firma: ${SIGNATURE_STATUS_LABELS[firmaEstado]}` : 'Sin firma'}
                             variant={firmaEstado ? SIGNATURE_STATUS_VARIANTS[firmaEstado] : BADGE_COLORS.MUTED}
@@ -209,12 +279,21 @@ export function DocumentsPanel({ patient }: { patient: Patient }) {
                           variant="outline"
                           size="sm"
                           disabled={requestSignature.isPending}
-                          onClick={() => requestSignature.mutate({ id: patient._id, docId: doc._id })}
+                          onClick={() => enviarAFirma(doc)}
                         >
-                          <PenTool className="h-4 w-4 mr-1" /> Enviar a firma
+                          <PenTool className="h-4 w-4 mr-1" /> {firmaEstado ? 'Enviar de nuevo a firma' : 'Enviar a firma'}
                         </Button>
                       )}
-                      {firmaEstado === 'enviado' && (
+                      {firmaEstado === 'enviado' && doc.firma?.signingUrl && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEnlace({ url: doc.firma!.signingUrl!, tipo: 'firma' })}
+                        >
+                          <Link2 className="h-4 w-4 mr-1" /> Enlace de firma
+                        </Button>
+                      )}
+                      {(firmaEstado === 'enviado' || (firmaEstado === 'firmado' && !doc.firma?.archivoFirmado)) && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -223,6 +302,11 @@ export function DocumentsPanel({ patient }: { patient: Patient }) {
                         >
                           <RefreshCw className={`h-4 w-4 mr-1 ${refreshSignature.isPending ? 'animate-spin' : ''}`} />
                           Actualizar estado
+                        </Button>
+                      )}
+                      {firmaEstado === 'enviado' && (
+                        <Button variant="ghost" size="sm" onClick={() => setCancelar(doc)}>
+                          <XCircle className="h-4 w-4 mr-1" /> Cancelar firma
                         </Button>
                       )}
                     </div>
@@ -241,7 +325,128 @@ export function DocumentsPanel({ patient }: { patient: Patient }) {
         initialTipo={uploadTipo}
       />
       <ReviewDialog patientId={patient._id} review={review} onClose={() => setReview(null)} />
+
+      <CertificadoDialog
+        open={certOpen}
+        onOpenChange={setCertOpen}
+        estado={certificado.data}
+        modo="personal"
+        onSubmit={async (data) => {
+          const r = await patientsAPI.requestCertificate(patient._id, data);
+          certificado.refetch();
+          return r.data;
+        }}
+        onEnlace={(url) => setEnlace({ url, tipo: 'certificado' })}
+      />
+      <EnlaceFirmaDialog
+        url={enlace?.url ?? null}
+        titulo={enlace?.tipo === 'certificado' ? 'Validación de identidad' : 'Enlace de firma'}
+        descripcion={
+          enlace?.tipo === 'certificado'
+            ? 'El paciente valida su identidad en Signapis (Clave Única u otro método) para obtener su firma. Ábrelo aquí si está presente o cópialo y envíaselo. Después vuelve a enviar el documento a firma.'
+            : 'El paciente firma en Signapis con la clave de su firma y un código que recibe. Ábrelo aquí si está presente o cópialo y envíaselo. También lo verá en su portal.'
+        }
+        onClose={() => setEnlace(null)}
+      />
+      <AlertDialog open={!!cancelar} onOpenChange={(o) => !o && setCancelar(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Cancelar la firma en curso?</AlertDialogTitle>
+            <AlertDialogDescription>
+              El enlace de firma de “{cancelar?.nombre}” dejará de funcionar. Después puedes enviarlo de nuevo.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Volver</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() =>
+                cancelar &&
+                cancelSignature.mutate({ id: patient._id, docId: cancelar._id }, { onSuccess: () => setCancelar(null) })
+              }
+            >
+              Cancelar firma
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+  );
+}
+
+const CERT_LABELS: Record<string, { label: string; className: string }> = {
+  activo: { label: 'Firma electrónica lista', className: 'text-success' },
+  enrolando: { label: 'Validación de identidad en curso', className: 'text-info' },
+  falta: { label: 'Sin firma electrónica', className: 'text-warning' },
+  fallido: { label: 'Firma electrónica no activa', className: 'text-destructive' },
+};
+
+/** Estado de la firma electrónica del paciente (certificado en Signapis). */
+function FirmaCard({
+  proveedorDePrueba,
+  ambiente,
+  usaCertificado,
+  certificado,
+  cargando,
+  error,
+  onObtener,
+  onVerEnlace,
+  onActualizar,
+}: {
+  proveedorDePrueba: boolean;
+  ambiente: 'pruebas' | 'produccion' | null;
+  usaCertificado: boolean;
+  certificado?: CertificateStatus;
+  cargando: boolean;
+  error: string | null;
+  onObtener: () => void;
+  onVerEnlace: (url: string) => void;
+  onActualizar: () => void;
+}) {
+  const info = certificado ? CERT_LABELS[certificado.estado] : null;
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3 min-w-0">
+          <ShieldCheck className="h-5 w-5 text-muted-foreground mt-0.5 shrink-0" />
+          <div className="min-w-0 space-y-0.5">
+            <p className="text-sm font-medium">
+              {usaCertificado ? (cargando ? 'Consultando firma electrónica…' : (info?.label ?? 'Firma electrónica')) : 'Firma electrónica'}
+              {ambiente === 'pruebas' && <span className="ml-2 text-xs text-warning">ambiente de pruebas</span>}
+            </p>
+            {proveedorDePrueba && (
+              <p className="text-xs text-warning">Proveedor de prueba: las firmas no tienen validez legal.</p>
+            )}
+            {error && <p className="text-xs text-destructive">{error}</p>}
+            {certificado?.mensaje && certificado.estado !== 'activo' && (
+              <p className={`text-xs ${info?.className ?? 'text-muted-foreground'}`}>{certificado.mensaje}</p>
+            )}
+            {usaCertificado && certificado?.estado === 'falta' && (
+              <p className="text-xs text-muted-foreground">
+                El paciente debe obtener su firma electrónica avanzada (una vez) antes de firmar documentos.
+              </p>
+            )}
+          </div>
+        </div>
+        {usaCertificado && (
+          <div className="flex flex-wrap gap-2 shrink-0">
+            {certificado?.estado === 'enrolando' && certificado.enrolamientoUrl && (
+              <Button variant="outline" size="sm" onClick={() => onVerEnlace(certificado.enrolamientoUrl!)}>
+                <Link2 className="h-4 w-4 mr-1" /> Enlace de validación
+              </Button>
+            )}
+            {certificado && certificado.estado !== 'activo' && (
+              <Button size="sm" variant={certificado.estado === 'enrolando' ? 'ghost' : 'default'} onClick={onObtener}>
+                <ShieldCheck className="h-4 w-4 mr-1" />
+                {certificado.estado === 'enrolando' ? 'Solicitar de nuevo' : 'Obtener firma electrónica'}
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" onClick={onActualizar}>
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -309,7 +514,11 @@ function UploadDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Subir documento</DialogTitle>
-          <DialogDescription>PDF, JPG o PNG de hasta 10 MB. Queda pendiente de revisión.</DialogDescription>
+          <DialogDescription>
+            {req?.requiereFirma
+              ? 'PDF de hasta 5 MB (se firma electrónicamente). Queda pendiente de revisión.'
+              : 'PDF, JPG o PNG de hasta 10 MB. Queda pendiente de revisión.'}
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-2">
@@ -351,7 +560,7 @@ function UploadDialog({
             <Input
               id="doc-file"
               type="file"
-              accept="application/pdf,image/jpeg,image/png"
+              accept={req?.requiereFirma ? 'application/pdf' : 'application/pdf,image/jpeg,image/png'}
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               required
             />
