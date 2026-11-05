@@ -357,7 +357,9 @@ function PruebaActual({
               </div>
               {cert.estado === 'enrolando' && (
                 <p className="text-xs text-muted-foreground">
-                  Al terminar en Signapis, esta tarjeta se actualiza sola.
+                  Aún faltan pasos en Signapis: completa todas las validaciones y crea tu clave de firma. Cuando
+                  Signapis emita el certificado, esta tarjeta se actualiza sola. El enlace dura 1 hora después de
+                  Clave Única; si venció, usa "Pedir de nuevo".
                 </p>
               )}
             </>
