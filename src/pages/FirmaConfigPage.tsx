@@ -24,6 +24,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Skeleton } from '@/components/ui/skeleton';
 import { signaturesAPI, apiErrorMessage } from '@/services/api';
+import { FirmaPruebaCard } from '@/components/firma/FirmaPruebaCard';
 import { DOCUMENT_TYPE_LABELS } from '@/lib/constants';
 import type { DocumentType, SignatureAdminConfig, SignatureSettings } from '@/types';
 
@@ -115,6 +116,8 @@ export function FirmaConfigPage() {
       )}
 
       <ProveedorCard data={data} />
+
+      <FirmaPruebaCard proveedor={data.proveedor} />
 
       <Card>
         <CardHeader>

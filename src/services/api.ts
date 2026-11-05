@@ -96,6 +96,30 @@ export interface CertificateRequestResult {
   message: string;
 }
 
+/** Firma de prueba que hace el administrador (no toca pacientes). */
+export interface FirmaDemo {
+  _id: string;
+  nombre: string;
+  rut: string;
+  email: string;
+  nombreArchivo: string;
+  createdAt: string;
+  certificado: {
+    requiere: boolean;
+    estado: 'no_aplica' | 'activo' | 'enrolando' | 'falta' | 'fallido';
+    mensaje?: string;
+    enrolamientoUrl?: string;
+  };
+  firma: null | {
+    estado: string;
+    mensaje?: string;
+    signingUrl?: string;
+    firmadoPor?: string;
+    fechaFirma?: string;
+    tieneArchivoFirmado: boolean;
+  };
+}
+
 /** Firma electrónica: configuración del administrador y herramientas del proveedor. */
 export const signaturesAPI = {
   getConfig: () => api.get<SignatureAdminConfig>('/signatures/config'),
@@ -108,6 +132,17 @@ export const signaturesAPI = {
   registerWebhook: () => api.post<{ message: string; url: string }>('/signatures/proveedor/webhook'),
   testWebhook: () => api.post<{ message: string }>('/signatures/proveedor/webhook/probar'),
   comunas: () => api.get<{ comunas: string[] }>('/signatures/comunas'),
+  // Firma de prueba del administrador
+  listDemos: () => api.get<{ demos: FirmaDemo[] }>('/signatures/demo'),
+  createDemo: (formData: FormData) =>
+    api.post<FirmaDemo>('/signatures/demo', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  getDemo: (id: string) => api.get<FirmaDemo>(`/signatures/demo/${id}`),
+  demoCertificate: (id: string, data: CertificateRequestData) =>
+    api.post<CertificateRequestResult>(`/signatures/demo/${id}/certificado`, data),
+  signDemo: (id: string) => api.post<{ signingUrl?: string; message: string }>(`/signatures/demo/${id}/firmar`),
+  demoFile: (id: string, firmado: boolean) =>
+    api.get<{ url: string }>(`/signatures/demo/${id}/archivo`, { params: firmado ? { firmado: 'true' } : {} }),
+  deleteDemo: (id: string) => api.delete<{ message: string }>(`/signatures/demo/${id}`),
 };
 
 export const configAPI = {
