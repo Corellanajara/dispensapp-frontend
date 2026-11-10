@@ -63,7 +63,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(updatedUser);
           localStorage.setItem('user', JSON.stringify(updatedUser));
 
-          if (updatedUser.sucursales?.length && !localStorage.getItem('sucursalActiva')) {
+          // Sin sucursal guardada, o la guardada ya no está disponible: usar la primera.
+          const guardada = localStorage.getItem('sucursalActiva');
+          if (updatedUser.sucursales?.length && !updatedUser.sucursales.some((s) => s._id === guardada)) {
             localStorage.setItem('sucursalActiva', updatedUser.sucursales[0]._id);
           }
         } catch {
