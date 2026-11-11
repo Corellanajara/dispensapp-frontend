@@ -226,7 +226,7 @@ export function FirmaConfigPage() {
                   </p>
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">Sin posición fija, Signapis decide dónde poner la firma.</p>
+                <p className="text-xs text-muted-foreground">Sin posición fija, la firma va en la página 1, abajo a la izquierda (X 100, Y 650).</p>
               )}
             </div>
 
