@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -164,6 +165,36 @@ export function FirmaConfigPage() {
           </CardContent>
         )}
       </Card>
+
+      {draft.habilitada && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <CardTitle className="text-lg">Validación del dispensario</CardTitle>
+                <CardDescription>
+                  Lo que firma el paciente queda pendiente en{' '}
+                  <Link to="/validacion-firmas" className="underline">Validación de firmas</Link> hasta que un responsable
+                  de firma lo revise y lo contrafirme con su propia firma electrónica. Si no cumple, lo rechaza con el motivo
+                  y el paciente sube una nueva versión. El documento cuenta como completo solo con ambas firmas.
+                </CardDescription>
+              </div>
+              <label className="flex items-center gap-2 text-sm font-medium cursor-pointer shrink-0">
+                <Switch checked={draft.contrafirma} onCheckedChange={(v: boolean) => set({ contrafirma: v })} />
+                {draft.contrafirma ? 'Con validación' : 'Sin validación'}
+              </label>
+            </div>
+          </CardHeader>
+          {draft.contrafirma && (
+            <CardContent>
+              <p className="text-xs text-muted-foreground">
+                Los responsables de firma se marcan en <Link to="/usuarios" className="underline">Usuarios</Link> (administradores
+                u operadores). Cada uno obtiene una vez su firma electrónica en Signapis desde la bandeja de validación.
+              </p>
+            </CardContent>
+          )}
+        </Card>
+      )}
 
       {draft.habilitada && (
         <Card>

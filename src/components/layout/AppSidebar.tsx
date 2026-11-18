@@ -31,7 +31,10 @@ import {
   FileSearch,
   ClipboardList,
   PenTool,
+  FileSignature,
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { validacionAPI } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { UserRole } from '@/types';
@@ -44,6 +47,8 @@ interface NavItem {
   icon: LucideIcon;
   roles: UserRole[];
   shortcut?: string;
+  /** Muestra la cantidad de documentos por validar. */
+  contadorValidacion?: boolean;
 }
 
 interface NavGroup {
@@ -63,6 +68,7 @@ const navGroups: NavGroup[] = [
     items: [
       { title: 'Pacientes', url: '/pacientes', icon: Users, roles: ['admin', 'operador'], shortcut: 'P' },
       { title: 'Dispensación', url: '/pedidos', icon: ClipboardList, roles: ['admin', 'operador'], shortcut: 'O' },
+      { title: 'Validar firmas', url: '/validacion-firmas', icon: FileSignature, roles: ['admin', 'operador'], contadorValidacion: true },
     ],
   },
   {
@@ -93,6 +99,15 @@ export function AppSidebar() {
   const { user, logout, hasRole, sucursalActiva, setSucursalActiva } = useAuth();
   const { pathname } = useLocation();
   const { isMobile, setOpenMobile } = useSidebar();
+  const esPersonal = !!user && ['admin', 'operador'].includes(user.role);
+  const { data: resumenValidacion } = useQuery({
+    queryKey: ['validacion-firmas', 'resumen', sucursalActiva?._id ?? null],
+    queryFn: () => validacionAPI.resumen().then((r) => r.data),
+    enabled: esPersonal,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+  const porValidar = resumenValidacion?.activa ? resumenValidacion.pendientes : 0;
 
   const closeMobileMenu = () => {
     if (isMobile) setOpenMobile(false);
@@ -177,6 +192,14 @@ export function AppSidebar() {
                           <item.icon className="h-4 w-4" />
                         </div>
                         <span className="flex-1 text-[13.5px]">{item.title}</span>
+                        {item.contadorValidacion && porValidar > 0 && (
+                          <span
+                            className="inline-flex min-w-5 h-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[11px] font-semibold text-white tabular-nums"
+                            title={`${porValidar} documento${porValidar === 1 ? '' : 's'} por validar`}
+                          >
+                            {porValidar}
+                          </span>
+                        )}
                         {item.shortcut && (
                           <kbd className="hidden lg:inline-flex h-5 items-center rounded-md bg-muted/50 px-1.5 font-mono text-[10px] text-muted-foreground/70 border border-border/40">
                             {item.shortcut}

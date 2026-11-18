@@ -173,6 +173,7 @@ export function UsersPage() {
                         <p className="text-xs font-mono">RUT {u.rut}</p>
                         <div className="flex flex-wrap items-center gap-2 mt-2">
                           <Badge className={roleColors[u.role]}>{USER_ROLE_LABELS[u.role]}</Badge>
+                          {u.responsableFirma && <Badge className="bg-amber-100 text-amber-800">Responsable de firma</Badge>}
                           <span className="text-xs text-muted-foreground">Dispensarios: {sucursalesText(u)}</span>
                         </div>
                         <div className="mt-2">{actions(u)}</div>
@@ -203,7 +204,10 @@ export function UsersPage() {
                         <TableCell className="font-medium">{u.nombre} {u.apellido}</TableCell>
                         <TableCell>{u.email}</TableCell>
                         <TableCell className="font-mono">{u.rut}</TableCell>
-                        <TableCell><Badge className={roleColors[u.role]}>{USER_ROLE_LABELS[u.role]}</Badge></TableCell>
+                        <TableCell>
+                          <Badge className={roleColors[u.role]}>{USER_ROLE_LABELS[u.role]}</Badge>
+                          {u.responsableFirma && <Badge className="ml-1 bg-amber-100 text-amber-800">Responsable de firma</Badge>}
+                        </TableCell>
                         <TableCell className="text-sm">{sucursalesText(u)}</TableCell>
                         <TableCell>
                           <Badge className={u.activo ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>

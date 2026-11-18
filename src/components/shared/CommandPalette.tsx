@@ -27,6 +27,7 @@ import {
   ClipboardList,
   Building2,
   PenTool,
+  FileSignature,
 } from 'lucide-react';
 import type { UserRole } from '@/types';
 import type { LucideIcon } from 'lucide-react';
@@ -44,6 +45,7 @@ const routes: CommandRoute[] = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard, roles: ['admin', 'operador', 'produccion', 'cultivo', 'finanzas'], group: 'Navegación', shortcut: 'D' },
   { title: 'Pacientes', url: '/pacientes', icon: Users, roles: ['admin', 'operador'], group: 'Navegación', shortcut: 'P' },
   { title: 'Dispensación', url: '/pedidos', icon: ClipboardList, roles: ['admin', 'operador'], group: 'Navegación', shortcut: 'O' },
+  { title: 'Validar firmas', url: '/validacion-firmas', icon: FileSignature, roles: ['admin', 'operador'], group: 'Navegación' },
   { title: 'Cultivo', url: '/cultivo', icon: Sprout, roles: ['admin', 'operador', 'cultivo'], group: 'Navegación' },
   { title: 'Inventario', url: '/inventario', icon: Warehouse, roles: ['admin', 'operador', 'cultivo', 'produccion'], group: 'Navegación' },
   { title: 'Transferencias', url: '/transferencias', icon: ArrowLeftRight, roles: ['admin', 'operador', 'cultivo', 'produccion'], group: 'Navegación' },

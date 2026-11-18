@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import type { CertificateStatus, DocumentType, Patient, PatientDocument } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -225,6 +226,24 @@ export function DocumentsPanel({ patient }: { patient: Patient }) {
                               Firmado{doc.firma?.firmadoPor ? ` por ${doc.firma.firmadoPor}` : ''}
                               {doc.firma?.rutFirmante ? ` (${doc.firma.rutFirmante})` : ''}
                               {doc.firma?.fechaFirma ? ` el ${formatDate(doc.firma.fechaFirma)}` : ''}
+                            </p>
+                          )}
+                          {firmaEstado === 'firmado' && (doc.etapaFirma === 'por_validar' || doc.etapaFirma === 'contrafirma_en_curso') && (
+                            <p className="text-xs text-warning">
+                              {doc.etapaFirma === 'por_validar'
+                                ? 'Falta la validación del dispensario. '
+                                : 'Contrafirma del dispensario en curso. '}
+                              <Link to="/validacion-firmas" className="underline">
+                                Ir a validación de firmas
+                              </Link>
+                            </p>
+                          )}
+                          {doc.contrafirma?.estado === 'firmado' && (
+                            <p className="text-xs text-success">
+                              Validado y contrafirmado
+                              {doc.contrafirma.firmadoPor ? ` por ${doc.contrafirma.firmadoPor}` : ''}
+                              {doc.contrafirma.rutFirmante ? ` (${doc.contrafirma.rutFirmante})` : ''}
+                              {doc.contrafirma.fechaFirma ? ` el ${formatDate(doc.contrafirma.fechaFirma)}` : ''}
                             </p>
                           )}
                           {doc.firma?.mensaje && firmaEstado && ['rechazado', 'error', 'cancelado', 'expirado'].includes(firmaEstado) && (
@@ -454,7 +473,10 @@ function FirmaCard({
 function cumple(patient: Patient, tipo: DocumentType, requiereFirma: boolean): boolean {
   if (tipo === 'receta_medica') return !!patient.recetaVigente;
   return (patient.documentos ?? []).some(
-    (d) => d.tipo === tipo && d.estado === 'aprobado' && (!requiereFirma || d.firma?.estado === 'firmado')
+    (d) =>
+      d.tipo === tipo &&
+      d.estado === 'aprobado' &&
+      (!requiereFirma || (d.etapaFirma ? d.etapaFirma === 'completo' : d.firma?.estado === 'firmado'))
   );
 }
 

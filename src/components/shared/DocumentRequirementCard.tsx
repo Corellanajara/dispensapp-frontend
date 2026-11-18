@@ -29,7 +29,15 @@ interface DocumentRequirementCardProps {
   onChanged: () => void;
 }
 
-type Estado = 'falta' | 'en_revision' | 'rechazado' | 'por_firmar' | 'firma_en_curso' | 'vencido' | 'completo';
+type Estado =
+  | 'falta'
+  | 'en_revision'
+  | 'rechazado'
+  | 'por_firmar'
+  | 'firma_en_curso'
+  | 'en_validacion'
+  | 'vencido'
+  | 'completo';
 
 function estadoDe(req: DocumentRequirement, doc?: PatientDocument): Estado {
   if (!doc) return 'falta';
@@ -41,6 +49,10 @@ function estadoDe(req: DocumentRequirement, doc?: PatientDocument): Estado {
   if (req.requiereFirma && doc.firma?.estado !== 'firmado') {
     return doc.firma?.estado === 'enviado' ? 'firma_en_curso' : 'por_firmar';
   }
+  // Ya firmó: falta que el dispensario lo valide y lo contrafirme.
+  if (req.requiereFirma && (doc.etapaFirma === 'por_validar' || doc.etapaFirma === 'contrafirma_en_curso')) {
+    return 'en_validacion';
+  }
   if (doc.estado === 'pendiente') return 'en_revision';
   return 'completo';
 }
@@ -51,6 +63,7 @@ const BADGES: Record<Estado, { label: string; className: string }> = {
   rechazado: { label: 'Rechazado', className: 'border-destructive/30 text-destructive bg-destructive/10' },
   por_firmar: { label: 'Falta firmar', className: 'border-amber-500/30 text-amber-600 bg-amber-500/10' },
   firma_en_curso: { label: 'Firma en curso', className: 'border-blue-500/30 text-blue-600 bg-blue-500/10' },
+  en_validacion: { label: 'En validación', className: 'border-blue-500/30 text-blue-600 bg-blue-500/10' },
   vencido: { label: 'Vencido', className: 'border-destructive/30 text-destructive bg-destructive/10' },
   completo: { label: 'Aprobado', className: 'border-emerald-500/30 text-emerald-600 bg-emerald-500/10' },
 };
@@ -218,6 +231,18 @@ export function DocumentRequirementCard({ requirement, doc, onChanged }: Documen
                 <PenTool className="h-3 w-3" />
                 Firmado{firma.firmadoPor ? ` por ${firma.firmadoPor}` : ''}
                 {firma.fechaFirma ? ` el ${formatDate(firma.fechaFirma)}` : ''}
+              </p>
+            )}
+            {estado === 'en_validacion' && (
+              <p className="text-xs text-muted-foreground">
+                El dispensario está revisando lo que firmaste. Si hay que corregir algo, verás aquí el motivo.
+              </p>
+            )}
+            {doc?.contrafirma?.estado === 'firmado' && (
+              <p className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400">
+                <CheckCircle2 className="h-3 w-3" />
+                Validado por el dispensario
+                {doc.contrafirma.fechaFirma ? ` el ${formatDate(doc.contrafirma.fechaFirma)}` : ''}
               </p>
             )}
             {firma && ['rechazado', 'expirado', 'cancelado', 'error'].includes(firma.estado) && (

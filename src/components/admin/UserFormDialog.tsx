@@ -34,17 +34,21 @@ export function UserFormDialog({ open, onOpenChange, user, onSaved }: Props) {
   const [sucursales, setSucursales] = useState<Sucursal[]>([]);
   const [role, setRole] = useState<UserRole>('operador');
   const [selectedSucursales, setSelectedSucursales] = useState<string[]>([]);
+  const [responsableFirma, setResponsableFirma] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setRole(user?.role ?? 'operador');
     setSelectedSucursales(user?.sucursales?.map((s) => s._id) ?? []);
+    setResponsableFirma(!!user?.responsableFirma);
     sucursalesAPI
       .list({ activo: 'true' })
       .then((r) => setSucursales(r.data))
       .catch(() => toast.error('Error al cargar dispensarios'));
   }, [open, user]);
+
+  const puedeSerResponsable = role === 'admin' || role === 'operador';
 
   const toggleSucursal = (id: string) =>
     setSelectedSucursales((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
@@ -65,6 +69,7 @@ export function UserFormDialog({ open, onOpenChange, user, onSaved }: Props) {
           telefono: (form.get('telefono') as string) || undefined,
           role,
           sucursales: selectedSucursales as unknown as User['sucursales'],
+          responsableFirma: puedeSerResponsable && responsableFirma,
         });
         toast.success('Usuario actualizado');
       } else {
@@ -158,6 +163,24 @@ export function UserFormDialog({ open, onOpenChange, user, onSaved }: Props) {
               ))}
             </div>
           </div>
+
+          {isEdit && puedeSerResponsable && (
+            <label className="flex items-start gap-2.5 rounded-lg border p-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={responsableFirma}
+                onChange={(e) => setResponsableFirma(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-input"
+              />
+              <span className="space-y-0.5">
+                <span className="block text-sm font-medium">Responsable de firma</span>
+                <span className="block text-xs text-muted-foreground">
+                  Valida y contrafirma con su propia firma electrónica lo que firman los pacientes
+                  {role === 'admin' ? ' de todos los dispensarios' : ' de sus dispensarios'}.
+                </span>
+              </span>
+            </label>
+          )}
 
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>

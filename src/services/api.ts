@@ -25,6 +25,8 @@ import type {
   CertificateStatus,
   SignatureAdminConfig,
   SignatureSettings,
+  BandejaValidacion,
+  ValidacionItem,
 } from '@/types';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
@@ -386,6 +388,26 @@ export const financeAPI = {
     }>('/finance/summary', { params }),
   cashflow: (params?: Record<string, string>) =>
     api.get('/finance/cashflow', { params }),
+};
+
+/** Validación del dispensario: el responsable revisa y contrafirma lo que firmaron los pacientes. */
+export const validacionAPI = {
+  resumen: () => api.get<{ activa: boolean; pendientes: number; responsable: boolean }>('/validacion-firmas/resumen'),
+  list: () => api.get<BandejaValidacion>('/validacion-firmas'),
+  certificado: () => api.get<CertificateStatus>('/validacion-firmas/certificado'),
+  solicitarCertificado: (data: CertificateRequestData) =>
+    api.post<CertificateRequestResult>('/validacion-firmas/certificado', data),
+  firmar: (patientId: string, docId: string, reiniciar = false) =>
+    api.post<{ item: ValidacionItem; firma: SignatureRequestResult }>(`/validacion-firmas/${patientId}/${docId}/firmar`, {
+      reiniciar,
+    }),
+  rechazar: (patientId: string, docId: string, motivo: string) =>
+    api.post<{ item: ValidacionItem }>(`/validacion-firmas/${patientId}/${docId}/rechazar`, { motivo }),
+  estado: (patientId: string, docId: string) =>
+    api.get<{ item: ValidacionItem }>(`/validacion-firmas/${patientId}/${docId}/estado`),
+  /** version "paciente": lo que firmó el paciente · "final": con la contrafirma del dispensario. */
+  archivo: (patientId: string, docId: string, version: 'paciente' | 'final') =>
+    api.get<UrlResponse>(`/validacion-firmas/${patientId}/${docId}/archivo`, { params: { version } }),
 };
 
 export const usersAPI = {

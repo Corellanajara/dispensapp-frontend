@@ -60,6 +60,9 @@ export interface User {
   ultimoAcceso?: string;
   /** Si está en el futuro, la cuenta está bloqueada por intentos fallidos. */
   bloqueadoHasta?: string;
+  /** Responsable de firma: valida y contrafirma lo que firman los pacientes de sus dispensarios. */
+  responsableFirma?: boolean;
+  certificadoFirma?: SignerCertificate;
   createdAt: string;
   updatedAt: string;
 }
@@ -146,6 +149,53 @@ export interface PatientDocument {
   revisadoPor?: string | UserRef;
   fechaRevision?: string;
   firma?: DocumentSignature;
+  /** Firma del responsable del dispensario sobre el PDF que firmó el paciente. */
+  contrafirma?: DocumentSignature;
+  /** Etapa calculada por el backend (firma del paciente → validación del dispensario). */
+  etapaFirma?: EtapaFirma;
+}
+
+/**
+ * - firma_paciente: falta que firme el paciente.
+ * - por_validar: el paciente firmó; espera a un responsable del dispensario.
+ * - contrafirma_en_curso: el responsable está firmando.
+ * - completo: firmado por ambos (o solo por el paciente si la validación está apagada).
+ * - rechazado: el responsable lo devolvió; el paciente sube una nueva versión.
+ */
+export type EtapaFirma = 'no_aplica' | 'firma_paciente' | 'por_validar' | 'contrafirma_en_curso' | 'completo' | 'rechazado';
+
+/** Documento en la bandeja de validación del dispensario. */
+export interface ValidacionItem {
+  paciente: { _id: string; nombre: string; rut: string; sucursal: SucursalRef | null };
+  documento: {
+    _id: string;
+    tipo: DocumentType;
+    etiqueta: string;
+    nombre: string;
+    fechaSubida: string;
+    estado: 'pendiente' | 'aprobado' | 'rechazado';
+    observaciones?: string;
+  };
+  etapa: EtapaFirma;
+  firmaPaciente: null | { firmadoPor?: string; rutFirmante?: string; fechaFirma?: string; tieneArchivo: boolean };
+  contrafirma: null | {
+    estado: SignatureStatus;
+    responsable?: string;
+    responsableId?: string;
+    firmadoPor?: string;
+    fechaFirma?: string;
+    signingUrl?: string;
+    mensaje?: string;
+    tieneArchivo: boolean;
+  };
+}
+
+export interface BandejaValidacion {
+  activa: boolean;
+  /** El usuario actual puede contrafirmar. */
+  responsable: boolean;
+  pendientes: ValidacionItem[];
+  validados: ValidacionItem[];
 }
 
 export interface PatientStatusChange {
@@ -626,6 +676,8 @@ export interface AppConfig {
     tiposConFirma: DocumentType[];
     proveedor: string;
     ambiente: 'pruebas' | 'produccion' | null;
+    /** Lo firmado por el paciente debe validarlo y contrafirmarlo un responsable del dispensario. */
+    contrafirma?: boolean;
     requiereCertificado: boolean;
     validezLegal: boolean;
   };
@@ -640,6 +692,8 @@ export interface SignatureSettings {
   conQR: boolean;
   posicion?: { pagina: number; x: number; y: number } | null;
   vigenciaCertificadoAnios: 1 | 2 | 3;
+  /** Validación del dispensario: un responsable revisa y contrafirma lo que firma el paciente. */
+  contrafirma: boolean;
 }
 
 export interface SignatureProviderInfo {

@@ -35,6 +35,7 @@ import { TransferenciasPage } from '@/pages/TransferenciasPage';
 import { FiscalizacionPage } from '@/pages/FiscalizacionPage';
 import { FirmaConfigPage } from '@/pages/FirmaConfigPage';
 import { FirmaCompletadaPage } from '@/pages/FirmaCompletadaPage';
+import { ValidacionFirmasPage } from '@/pages/ValidacionFirmasPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -79,6 +80,7 @@ function App() {
                 <Route path="/pacientes/:id" element={<ProtectedRoute roles={['admin', 'operador']}><PatientDetailPage /></ProtectedRoute>} />
                 <Route path="/pacientes/:id/expediente" element={<ProtectedRoute roles={['admin', 'operador']}><PatientExpedientePage /></ProtectedRoute>} />
                 {/* /pedidos = notas de dispensación (se mantiene la ruta para no romper enlaces) */}
+                <Route path="/validacion-firmas" element={<ProtectedRoute roles={['admin', 'operador']}><ValidacionFirmasPage /></ProtectedRoute>} />
                 <Route path="/pedidos" element={<ProtectedRoute roles={['admin', 'operador']}><OrdersPage /></ProtectedRoute>} />
                 <Route path="/pedidos/:id" element={<ProtectedRoute roles={['admin', 'operador']}><OrderDetailPage /></ProtectedRoute>} />
                 <Route path="/cultivo" element={<ProtectedRoute roles={['admin', 'operador', 'cultivo']}><CultivoPage /></ProtectedRoute>} />

@@ -18,6 +18,7 @@ const DEFAULT_CONFIG: AppConfig = {
   firma: {
     habilitada: false,
     tiposConFirma: [],
+    contrafirma: false,
     proveedor: '',
     ambiente: null,
     requiereCertificado: false,

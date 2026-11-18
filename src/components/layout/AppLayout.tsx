@@ -23,6 +23,8 @@ const breadcrumbMap: Record<string, string> = {
   '/finanzas': 'Finanzas',
   '/usuarios': 'Usuarios',
   '/auditoria': 'Auditoría',
+  '/validacion-firmas': 'Validar firmas',
+  '/configuracion/firma': 'Firma electrónica',
 };
 
 // Segmentos finales con nombre propio (ej. /pacientes/:id/expediente).
